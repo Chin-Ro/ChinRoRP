@@ -44,16 +44,19 @@ public class Shadows
         _dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
         _otherShadowAtlasId = Shader.PropertyToID("_OtherShadowAtlas"),
         _otherShadowMatricesId = Shader.PropertyToID("_OtherShadowMatrices"),
+        _otherShadowTilesId = Shader.PropertyToID("_OtherShadowTiles"),
         _cascadeCountId = Shader.PropertyToID("_CascadeCount"),
         _cascadeCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres"),
         _cascadeDataId = Shader.PropertyToID("_CascadeData"),
         _shadowAtlasSizeId = Shader.PropertyToID("_ShadowAtlasSize"),
         //_shadowDistanceId = Shader.PropertyToID("_ShadowDistance");
-        _shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade");
+        _shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade"),
+        _shadowPancakingId = Shader.PropertyToID("_ShadowPancaking");
 
     private static Vector4[]
         _cascadeCullingSpheres = new Vector4[MaxCascades],
-        _cascadeData = new Vector4[MaxCascades];
+        _cascadeData = new Vector4[MaxCascades],
+        _otherShadowTiles = new Vector4[MaxShadowedOtherLightCount];
 
     private Vector4 _atlasSizes;
 
@@ -202,6 +205,7 @@ public class Shadows
         _buffer.GetTemporaryRT(_dirShadowAtlasId, atlasSize, atlasSize, 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
         _buffer.SetRenderTarget(_dirShadowAtlasId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
         _buffer.ClearRenderTarget(true, false, Color.clear);
+        _buffer.SetGlobalFloat(_shadowPancakingId, 1f);
         //_buffer.SetGlobalFloat(_shadowDistanceId, _shadowSettings.maxDistance);
         // float f = 1f - _shadowSettings.directional.cascadeFade;
         // _buffer.SetGlobalVector(_shadowDistanceFadeId, new Vector4(1f /_shadowSettings.maxDistance, 1f/ _shadowSettings.distanceFade, 1f / (1f - f * f)));
@@ -235,6 +239,7 @@ public class Shadows
         _buffer.GetTemporaryRT(_otherShadowAtlasId, atlasSize, atlasSize, 32, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
         _buffer.SetRenderTarget(_otherShadowAtlasId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
         _buffer.ClearRenderTarget(true, false, Color.clear);
+        _buffer.SetGlobalFloat(_shadowPancakingId, 0f);
         //_buffer.SetGlobalFloat(_shadowDistanceId, _shadowSettings.maxDistance);
         // float f = 1f - _shadowSettings.directional.cascadeFade;
         // _buffer.SetGlobalVector(_shadowDistanceFadeId, new Vector4(1f /_shadowSettings.maxDistance, 1f/ _shadowSettings.distanceFade, 1f / (1f - f * f)));
@@ -251,6 +256,7 @@ public class Shadows
         }
         
         _buffer.SetGlobalMatrixArray(_otherShadowMatricesId, _otherShadowMatrices);
+        _buffer.SetGlobalVectorArray(_otherShadowTilesId, _otherShadowTiles);
         SetKeywords(_otherFilterKeywords, (int)_shadowSettings.other.filter - 1);
         _buffer.EndSample(BufferName);
         ExecuteBuffer();
@@ -280,6 +286,8 @@ public class Shadows
         Vector3 ratios = _shadowSettings.directional.CascadeRatios;
         float cullingFactor = Mathf.Max(0f, 0.8f - _shadowSettings.directional.cascadeFade);
 
+        float tileScale = 1f / split;
+
         for (int i = 0; i < cascadeCount; i++)
         {
             _cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(light.VisibleLightIndex, i, cascadeCount,
@@ -293,7 +301,7 @@ public class Shadows
             }
             int tileIndex = tileOffset + i;
             //SetTileViewport(index, split, tileSize);
-            _dirShadowMatrices[tileIndex] = ConvertToAtlasMatrix(projectionMatrix * viewMatrix, SetTileViewport(tileIndex, split, tileSize), split);
+            _dirShadowMatrices[tileIndex] = ConvertToAtlasMatrix(projectionMatrix * viewMatrix, SetTileViewport(tileIndex, split, tileSize), tileScale);
             _buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
             //_buffer.SetGlobalDepthBias(0f, 3f);
             _buffer.SetGlobalDepthBias(0f, light.SlopeScaleBias);
@@ -304,6 +312,16 @@ public class Shadows
         }
     }
 
+    void SetOtherTileData(int index, Vector2 offset, float scale, float bias)
+    {
+        float border = _atlasSizes.w * 0.5f;
+        Vector4 data = Vector4.zero;
+        data.x = offset.x * scale + border;
+        data.y = offset.y * scale + border;
+        data.z = scale - border - border;
+        data.w = bias;
+        _otherShadowTiles[index] = data;
+    }
     void RenderSpotShadows(int index, int split, int tileSize)
     {
         ShadowedOtherLight light = _shadowedOtherLights[index];
@@ -311,8 +329,14 @@ public class Shadows
         _cullingResults.ComputeSpotShadowMatricesAndCullingPrimitives(light.VisibleLightIndex, out Matrix4x4 viewMatrix,
             out Matrix4x4 projMatrix, out ShadowSplitData splitData);
         shadowSettings.splitData = splitData;
+        float texelSize = 2f / (tileSize * projMatrix.m00);
+        float filterSize = texelSize * ((float)_shadowSettings.other.filter + 1f);
+        float bias = light.NormalBias * filterSize * 1.4142136f;
+        Vector2 offset = SetTileViewport(index, split, tileSize);
+        float tileScale = 1f / split; 
+        SetOtherTileData(index, offset, tileScale, bias);
         _otherShadowMatrices[index] =
-            ConvertToAtlasMatrix(projMatrix * viewMatrix, SetTileViewport(index, split, tileSize), split);
+            ConvertToAtlasMatrix(projMatrix * viewMatrix, offset, tileScale);
         _buffer.SetViewProjectionMatrices(viewMatrix, projMatrix);
         _buffer.SetGlobalDepthBias(0f, light.SlopeScaleBias);
         ExecuteBuffer();
@@ -347,7 +371,7 @@ public class Shadows
         return offset;
     }
 
-    Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m, Vector2 offset, int split)
+    Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m, Vector2 offset, float scale)
     {
         if (SystemInfo.usesReversedZBuffer)
         {
@@ -357,7 +381,7 @@ public class Shadows
             m.m23 = -m.m23;
         }
 
-        float scale = 1f / split;
+        //float scale = 1f / split;
         m.m00 = (0.5f * (m.m00 + m.m30) + offset.x * m.m30) * scale;
         m.m01 = (0.5f * (m.m01 + m.m31) + offset.x * m.m31) * scale;
         m.m02 = (0.5f * (m.m02 + m.m32) + offset.x * m.m32) * scale;
