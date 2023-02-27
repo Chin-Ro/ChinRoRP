@@ -30,4 +30,4 @@ MonoBehaviour:
       cascadeBlend: 2
     other:
       atlasSize: 512
-      filter: 2
+      filter: 3
