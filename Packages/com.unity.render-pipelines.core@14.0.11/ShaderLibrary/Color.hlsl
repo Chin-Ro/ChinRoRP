@@ -715,6 +715,38 @@ float3 AcesTonemap(float3 aces)
 #endif
 }
 
+// https://www.desmos.com/calculator/gslcdxvipg?lang=zh-CN
+float3 GranTurismoTonemap(float3 x)
+{
+    float P = 1.0;  // Maximum brightness
+    float a = 1.0;  // Contrast
+    float m = 0.22; // Linear section start
+    float l = 0.4;  // Linear section length
+    float c = 1.33; // Black tightness
+    float b = 0;
+
+    // Linear region computation
+    float l0 = (P - m) * l / a; //l0 is the linear length after scale, 0.312
+    float L0 = m - m / a; // 0
+    float L1 = m + (1 - m) / a; // 1 
+    float3 L = m + a * (x - m); 
+
+    // Toe
+    float3 T = m * pow(x / m, c) + b;
+
+    // Shoulder
+    float S0 = m + l0; // 0.532
+    float S1 = m + a * l0; // 0.532
+    float C2 = (a * P) / (P - S1); // 2.13675213675
+    float3 S = P - (P - S1) * exp(-C2 * (x - S0) / P);
+
+    float3 w0 = 1 - smoothstep(0, m, x);
+    float3 w2 = x <= m + l0 ? 0 : 1;
+    float3 w1 = 1 - w0 - w2;
+
+    return T * w0 + L * w1 + S * w2;
+}
+
 // RGBM encode/decode
 static const float kRGBMRange = 8.0;
 
