@@ -1922,6 +1922,9 @@ namespace UnityEngine.Rendering.Universal
                 case TonemappingMode.ACES:
                     eetfMode = (int)tonemapping.acesPreset.value;
                     break;
+                
+                case TonemappingMode.GranTurismo:
+                    break;
             }
 
             hdrOutputParameters = new Vector4(eetfMode, hueShift, 0.0f, 0.0f);
