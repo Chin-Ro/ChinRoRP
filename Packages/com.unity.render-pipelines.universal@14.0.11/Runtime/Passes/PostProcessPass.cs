@@ -1313,6 +1313,7 @@ namespace UnityEngine.Rendering.Universal
                     case TonemappingMode.Neutral: material.EnableKeyword(ShaderKeywordStrings.TonemapNeutral); break;
                     case TonemappingMode.ACES: material.EnableKeyword(ShaderKeywordStrings.TonemapACES); break;
                     case TonemappingMode.GranTurismo: material.EnableKeyword(ShaderKeywordStrings.TonemapGranTurismo); break;
+                    case TonemappingMode.Filmic: material.EnableKeyword(ShaderKeywordStrings.TonemapFilmic); break;
                     default: break; // None
                 }
             }

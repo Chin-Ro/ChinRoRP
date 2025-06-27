@@ -1,7 +1,7 @@
 Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
 {
     HLSLINCLUDE
-        #pragma multi_compile_local _ _TONEMAP_ACES _TONEMAP_NEUTRAL _TONEMAP_GRANTURISMO
+        #pragma multi_compile_local _ _TONEMAP_ACES _TONEMAP_NEUTRAL _TONEMAP_GRANTURISMO _TONEMAP_FILMIC
         #pragma multi_compile_local_fragment _ HDR_COLORSPACE_CONVERSION
 
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -58,6 +58,8 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
             #ifdef _TONEMAP_ACES
                 // In ACES workflow we return graded color in ACEScg, we move to ACES (AP0) later on
                 return gradedColor;
+            #elif defined(_TONEMAP_FILMIC)
+                return gradedColor;
             #elif defined(HDR_COLORSPACE_CONVERSION) // HDR but not ACES workflow
                 // If we are doing HDR we expect grading to finish at Rec2020. Any supplemental rotation is done inside the various options.
                 return RotateRec709ToRec2020(gradedColor);
@@ -81,6 +83,8 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
             // Do contrast in log after white balance
             #if _TONEMAP_ACES
             float3 colorLog = ACES_to_ACEScc(unity_to_ACES(colorLinear));
+            #elif _TONEMAP_FILMIC
+            float3 colorLog = ACES_to_ACEScc(unity_to_ACES(colorLinear));
             #else
             float3 colorLog = LinearToLogC(colorLinear);
             #endif
@@ -88,6 +92,8 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
             colorLog = (colorLog - ACEScc_MIDGRAY) * _HueSatCon.z + ACEScc_MIDGRAY;
 
             #if _TONEMAP_ACES
+            colorLinear = ACES_to_ACEScg(ACEScc_to_ACES(colorLog));
+            #elif _TONEMAP_FILMIC
             colorLinear = ACES_to_ACEScg(ACEScc_to_ACES(colorLog));
             #else
             colorLinear = LogCToLinear(colorLog);
@@ -198,9 +204,15 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
                 float3 aces = ACEScg_to_ACES(colorLinear);
                 colorLinear = AcesTonemap(aces);
             }
+            #elif _TONEMAP_FILMIC
+            {
+                // Note: input is actually ACEScg (AP1 w/ linear encoding)
+                float3 aces = ACEScg_to_ACES(colorLinear);
+                colorLinear = FilmicTonemap(aces);
+            }
             #elif _TONEMAP_GRANTURISMO
             {
-                colorLinear = GranturismoTonemap(colorLinear);
+                colorLinear = GranTurismoTonemap(colorLinear);
             }
             #endif
 
@@ -211,6 +223,9 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
         {
             #ifdef HDR_COLORSPACE_CONVERSION
                 #ifdef _TONEMAP_ACES
+                float3 aces = ACEScg_to_ACES(colorLinear);
+                return HDRMappingACES(aces.rgb, PaperWhite, MinNits, MaxNits, RangeReductionMode, true);
+                #elif _TONEMAP_FILMIC
                 float3 aces = ACEScg_to_ACES(colorLinear);
                 return HDRMappingACES(aces.rgb, PaperWhite, MinNits, MaxNits, RangeReductionMode, true);
                 #elif _TONEMAP_NEUTRAL

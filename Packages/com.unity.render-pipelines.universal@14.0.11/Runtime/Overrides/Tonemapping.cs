@@ -29,6 +29,11 @@ namespace UnityEngine.Rendering.Universal
         /// Use this option if you want to a ToonShading Tonemapper.
         /// </summary>
         GranTurismo, // https://www.desmos.com/calculator/gslcdxvipg?lang=zh-CN
+        
+        /// <summary>
+        /// UE ACES Tonemapper.
+        /// </summary>
+        Filmic, // https://www.desmos.com/calculator/0qj1x8k2y3?lang=zh-CN
     }
 
     /// <summary>

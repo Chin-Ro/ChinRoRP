@@ -747,6 +747,86 @@ float3 GranTurismoTonemap(float3 x)
     return T * w0 + L * w1 + S * w2;
 }
 
+float3 FilmicTonemap(float3 aces)
+{
+    float _FilmSlope = 0.88;
+    float _FilmToe = 0.55;
+    float _FilmShoulder = 0.26;
+    float _FilmBlackClip = 0.0;
+    float _FilmWhiteClip = 0.04;
+    
+    // --- Glow module --- //
+    float saturation = rgb_2_saturation(aces);
+    float ycIn = rgb_2_yc(aces);
+    float s = sigmoid_shaper((saturation - 0.4) / 0.2);
+    float addedGlow = 1.0 + glow_fwd(ycIn, RRT_GLOW_GAIN * s, RRT_GLOW_MID);
+    aces *= addedGlow;
+
+    // --- Red modifier --- //
+    float hue = rgb_2_hue(aces);
+    float centeredHue = center_hue(hue, RRT_RED_HUE);
+    float hueWeight;
+    {
+        //hueWeight = cubic_basis_shaper(centeredHue, RRT_RED_WIDTH);
+        hueWeight = smoothstep(0.0, 1.0, 1.0 - abs(2.0 * centeredHue / RRT_RED_WIDTH));
+        hueWeight *= hueWeight;
+    }
+
+    aces.r += hueWeight * saturation * (RRT_RED_PIVOT - aces.r) * (1.0 - RRT_RED_SCALE);
+
+    // --- ACES to RGB rendering space --- //
+    float3 acescg = max(0.0, ACES_to_ACEScg(aces));
+
+    // --- Global desaturation --- //
+    //acescg = mul(RRT_SAT_MAT, acescg);
+    acescg = lerp(dot(acescg, AP1_RGB2Y).xxx, acescg, RRT_SAT_FACTOR.xxx);
+
+    const half toeScale =       1 + _FilmBlackClip - _FilmToe;
+    const half shoulderScale =  1 + _FilmWhiteClip - _FilmShoulder;
+
+    const float inMatch = 0.18;
+    const float outMatch = 0.18;
+
+    float toeMatch;
+    if (_FilmToe > 0.8)
+    {
+        // 0.18 will be on straight segment
+        toeMatch = (1 - _FilmToe - outMatch) / _FilmSlope + log10(inMatch);
+    }
+    else
+    {
+        // 0.18 will be on toe segment
+
+        // Solve for ToeMatch such that input of InMatch gives output of OutMatch.
+        const float bt = ( outMatch + _FilmBlackClip ) / toeScale - 1;
+        toeMatch = log10(inMatch) - 0.5 * log((1 + bt) / (1 - bt)) * (toeScale / _FilmSlope);
+    }
+
+    float straightMatch = (1 - _FilmToe) / _FilmSlope - toeMatch;
+    float shoulderMatch = _FilmShoulder / _FilmSlope - straightMatch;
+
+    half3 logColor = log10(acescg);
+    half3 straightColor = _FilmSlope * (logColor + straightMatch);
+
+    half3 toeColor = ( -_FilmBlackClip) + (2 * toeScale) / (1 + exp((-2 * _FilmSlope / toeScale) * (logColor - toeMatch)));
+    half3 shoulderColor = (1 + _FilmWhiteClip) - (2 * shoulderScale) / (1 + exp((2 * _FilmSlope / shoulderScale) * (logColor - shoulderMatch)));
+    
+    toeColor =      logColor < toeMatch ? toeColor : straightColor;
+    shoulderColor = logColor > shoulderMatch ? shoulderColor : straightColor;
+
+    half3 t = saturate((logColor - toeMatch) / (shoulderMatch - toeMatch));
+    t = shoulderMatch < toeMatch ? 1 - t : t;
+    t = (3- 2 * t) * t * t; // cubic interpolation
+    half3 toneColor = lerp(toeColor, shoulderColor, t);
+
+    // Post desaturate
+    toneColor = lerp( dot( float3(toneColor), AP1_RGB2Y ), toneColor, 0.93 );
+
+    toneColor = mul(AP1_2_sRGB, toneColor);
+    // Returning positive sRGB values
+    return max( 0, toneColor );
+}
+
 // RGBM encode/decode
 static const float kRGBMRange = 8.0;
 

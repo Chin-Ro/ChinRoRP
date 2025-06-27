@@ -79,6 +79,9 @@ half3 ApplyTonemap(half3 input)
     input = NeutralTonemap(input);
 #elif _TONEMAP_GRANTURISMO
     input = GranTurismoTonemap(input);
+#elif _TONEMAP_FILMIC
+    float3 aces = unity_to_ACES(input);
+    input = FilmicTonemap(aces);
 #endif
 
     return saturate(input);
