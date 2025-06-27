@@ -747,14 +747,14 @@ float3 GranTurismoTonemap(float3 x)
     return T * w0 + L * w1 + S * w2;
 }
 
+float _FilmSlope;
+float _FilmToe;
+float _FilmShoulder;
+float _FilmBlackClip;
+float _FilmWhiteClip;
+
 float3 FilmicTonemap(float3 aces)
 {
-    float _FilmSlope = 0.88;
-    float _FilmToe = 0.55;
-    float _FilmShoulder = 0.26;
-    float _FilmBlackClip = 0.0;
-    float _FilmWhiteClip = 0.04;
-    
     // --- Glow module --- //
     float saturation = rgb_2_saturation(aces);
     float ycIn = rgb_2_yc(aces);
@@ -822,7 +822,8 @@ float3 FilmicTonemap(float3 aces)
     // Post desaturate
     toneColor = lerp( dot( float3(toneColor), AP1_RGB2Y ), toneColor, 0.93 );
 
-    toneColor = mul(AP1_2_sRGB, toneColor);
+    toneColor = ACEScg_to_unity(toneColor);
+    
     // Returning positive sRGB values
     return max( 0, toneColor );
 }

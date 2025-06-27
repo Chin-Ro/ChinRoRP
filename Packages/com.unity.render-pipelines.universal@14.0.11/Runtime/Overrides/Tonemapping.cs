@@ -133,6 +133,17 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         [Tooltip("The maximum brightness of the screen (in nits). This value is defined by the preset when using ACES Tonemap.")]
         public ClampedFloatParameter maxNits = new ClampedFloatParameter(1000.0f, 0.0f, 5000.0f);
+        
+        [AdditionalProperty]
+        public ClampedFloatParameter slope = new ClampedFloatParameter(0.88f, 0.0f, 1.0f);
+        [AdditionalProperty]
+        public ClampedFloatParameter toe = new ClampedFloatParameter(0.55f, 0.0f, 1.0f);
+        [AdditionalProperty]
+        public ClampedFloatParameter shoulder = new ClampedFloatParameter(0.26f, 0.0f, 1.0f);
+        [AdditionalProperty]
+        public ClampedFloatParameter blackClip = new ClampedFloatParameter(0.0f, 0.0f, 1.0f);
+        [AdditionalProperty]
+        public ClampedFloatParameter whiteClip = new ClampedFloatParameter(0.04f, 0.0f, 1.0f);
 
         /// <inheritdoc/>
         public bool IsActive() => mode.value != TonemappingMode.None;

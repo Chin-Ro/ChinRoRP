@@ -16,6 +16,11 @@ namespace UnityEditor.Rendering.Universal
         SerializedDataParameter m_HDRMinNits;
         SerializedDataParameter m_HDRMaxNits;
         SerializedDataParameter m_HDRAcesPreset;
+        private SerializedDataParameter m_Slope;
+        private SerializedDataParameter m_Toe;
+        private SerializedDataParameter m_Shoulder;
+        private SerializedDataParameter m_BlackClip;
+        private SerializedDataParameter m_WhiteClip;
 
         public override bool hasAdditionalProperties => true;
 
@@ -32,11 +37,24 @@ namespace UnityEditor.Rendering.Universal
             m_HDRMinNits = Unpack(o.Find(x => x.minNits));
             m_HDRMaxNits = Unpack(o.Find(x => x.maxNits));
             m_HDRAcesPreset = Unpack(o.Find(x => x.acesPreset));
+            m_Slope = Unpack(o.Find(x => x.slope));
+            m_Toe = Unpack(o.Find(x => x.toe));
+            m_Shoulder = Unpack(o.Find(x => x.shoulder));
+            m_BlackClip = Unpack(o.Find(x => x.blackClip));
+            m_WhiteClip = Unpack(o.Find(x => x.whiteClip));
         }
 
         public override void OnInspectorGUI()
         {
             PropertyField(m_Mode);
+            if (m_Mode.value.intValue == (int)TonemappingMode.Filmic)
+            {
+                PropertyField(m_Slope);
+                PropertyField(m_Toe);
+                PropertyField(m_Shoulder);
+                PropertyField(m_BlackClip);
+                PropertyField(m_WhiteClip);
+            }
 
             // Display a warning if the user is trying to use a tonemap while rendering in LDR
             var asset = UniversalRenderPipeline.asset;

@@ -227,7 +227,14 @@ namespace UnityEngine.Rendering.Universal.Internal
                         case TonemappingMode.Neutral: material.EnableKeyword(ShaderKeywordStrings.TonemapNeutral); break;
                         case TonemappingMode.ACES: material.EnableKeyword(allowColorGradingACESHDR ? ShaderKeywordStrings.TonemapACES : ShaderKeywordStrings.TonemapNeutral); break;
                         case TonemappingMode.GranTurismo: material.EnableKeyword(ShaderKeywordStrings.TonemapGranTurismo); break;
-                        case TonemappingMode.Filmic: material.EnableKeyword(allowColorGradingACESHDR ? ShaderKeywordStrings.TonemapFilmic : ShaderKeywordStrings.TonemapNeutral); break;
+                        case TonemappingMode.Filmic:
+                            material.EnableKeyword(allowColorGradingACESHDR ? ShaderKeywordStrings.TonemapFilmic : ShaderKeywordStrings.TonemapNeutral);
+                            cmd.SetGlobalFloat(ShaderConstants._FilmSlope, tonemapping.slope.value);
+                            cmd.SetGlobalFloat(ShaderConstants._FilmToe, tonemapping.toe.value);
+                            cmd.SetGlobalFloat(ShaderConstants._FilmShoulder, tonemapping.shoulder.value);
+                            cmd.SetGlobalFloat(ShaderConstants._FilmBlackClip, tonemapping.blackClip.value);
+                            cmd.SetGlobalFloat(ShaderConstants._FilmWhiteClip, tonemapping.whiteClip.value);
+                            break;
                         default: break; // None
                     }
 
@@ -321,6 +328,11 @@ namespace UnityEngine.Rendering.Universal.Internal
             public static readonly int _CurveHueVsSat = Shader.PropertyToID("_CurveHueVsSat");
             public static readonly int _CurveLumVsSat = Shader.PropertyToID("_CurveLumVsSat");
             public static readonly int _CurveSatVsSat = Shader.PropertyToID("_CurveSatVsSat");
+            public static readonly int _FilmSlope = Shader.PropertyToID("_FilmSlope");
+            public static readonly int _FilmToe = Shader.PropertyToID("_FilmToe");
+            public static readonly int _FilmShoulder = Shader.PropertyToID("_FilmShoulder");
+            public static readonly int _FilmBlackClip = Shader.PropertyToID("_FilmBlackClip");
+            public static readonly int _FilmWhiteClip = Shader.PropertyToID("_FilmWhiteClip");
         }
     }
 }

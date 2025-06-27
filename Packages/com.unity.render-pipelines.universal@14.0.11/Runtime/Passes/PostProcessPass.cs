@@ -1313,7 +1313,14 @@ namespace UnityEngine.Rendering.Universal
                     case TonemappingMode.Neutral: material.EnableKeyword(ShaderKeywordStrings.TonemapNeutral); break;
                     case TonemappingMode.ACES: material.EnableKeyword(ShaderKeywordStrings.TonemapACES); break;
                     case TonemappingMode.GranTurismo: material.EnableKeyword(ShaderKeywordStrings.TonemapGranTurismo); break;
-                    case TonemappingMode.Filmic: material.EnableKeyword(ShaderKeywordStrings.TonemapFilmic); break;
+                    case TonemappingMode.Filmic: 
+                        material.EnableKeyword(ShaderKeywordStrings.TonemapFilmic);
+                        cmd.SetGlobalFloat(ShaderConstants._FilmSlope, m_Tonemapping.slope.value);
+                        cmd.SetGlobalFloat(ShaderConstants._FilmToe, m_Tonemapping.toe.value);
+                        cmd.SetGlobalFloat(ShaderConstants._FilmShoulder, m_Tonemapping.shoulder.value);
+                        cmd.SetGlobalFloat(ShaderConstants._FilmBlackClip, m_Tonemapping.blackClip.value);
+                        cmd.SetGlobalFloat(ShaderConstants._FilmWhiteClip, m_Tonemapping.whiteClip.value);
+                        break;
                     default: break; // None
                 }
             }
@@ -1706,6 +1713,12 @@ namespace UnityEngine.Rendering.Universal
             public static readonly int _FlareData5 = Shader.PropertyToID("_FlareData5");
 
             public static readonly int _FullscreenProjMat = Shader.PropertyToID("_FullscreenProjMat");
+            
+            public static readonly int _FilmSlope = Shader.PropertyToID("_FilmSlope");
+            public static readonly int _FilmToe = Shader.PropertyToID("_FilmToe");
+            public static readonly int _FilmShoulder = Shader.PropertyToID("_FilmShoulder");
+            public static readonly int _FilmBlackClip = Shader.PropertyToID("_FilmBlackClip");
+            public static readonly int _FilmWhiteClip = Shader.PropertyToID("_FilmWhiteClip");
 
             public static int[] _BloomMipUp;
             public static int[] _BloomMipDown;
