@@ -525,7 +525,18 @@ namespace UnityEngine.Rendering.Universal
                 if (bloomActive)
                 {
                     using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.Bloom)))
-                        SetupBloom(cmd, GetSource(), m_Materials.uber);
+                    {
+                        switch (m_Bloom.bloomMode.value)
+                        {
+                            case BloomMode.Unity:
+                                SetupBloom(cmd, GetSource(), m_Materials.uber);
+                                break;
+                            case BloomMode.UE:
+                                SetupUEBloom(cmd, GetSource(), m_Materials.uber);
+                                break;
+                        }
+                    }
+                        
                 }
 
                 // Lens Flare
@@ -1199,6 +1210,238 @@ namespace UnityEngine.Rendering.Universal
                 uberMaterial.EnableKeyword(dirtIntensity > 0f ? ShaderKeywordStrings.BloomLQDirt : ShaderKeywordStrings.BloomLQ);
         }
 
+        struct BloomStage
+        {
+            public float Size;
+            public Color Tint;
+        }
+        
+        float GetClampedKernelRadius(uint SampleCountMax, float KernelRadius)
+        {
+            return Mathf.Clamp(KernelRadius, 0.00001f, SampleCountMax - 1);
+        }
+        
+        int GetIntegerKernelRadius(uint SampleCountMax, float KernelRadius)
+        {
+            // Smallest radius will be 1.
+            return (int)Mathf.Min(Mathf.CeilToInt(GetClampedKernelRadius(SampleCountMax, KernelRadius)), SampleCountMax - 1);
+        }
+        
+        // Evaluates an unnormalized normal distribution PDF around 0 at given X with Variance.
+        float NormalDistributionUnscaled(float X, float Sigma, float CrossCenterWeight = 0)
+        {
+            float DX = Mathf.Abs(X);
+
+            float ClampedOneMinusDX = Mathf.Max(0.0f, 1.0f - DX);
+
+            // Tweak the gaussian shape e.g. "r.Bloom.Cross 3.5"
+            if (CrossCenterWeight > 1.0f)
+            {
+                return Mathf.Pow(ClampedOneMinusDX, CrossCenterWeight);
+            }
+            else
+            {
+                // Constant is tweaked give a similar look to UE before we fixed the scale bug (Some content tweaking might be needed).
+                // The value defines how much of the Gaussian clipped by the sample window.
+                // r.Filter.SizeScale allows to tweak that for performance/quality.
+                float LegacyCompatibilityConstant = -16.7f;
+
+                float Gaussian = Mathf.Exp(LegacyCompatibilityConstant * Mathf.Pow(DX / Sigma, 2));
+                
+                return Mathf.Lerp(Gaussian, ClampedOneMinusDX, CrossCenterWeight);
+            }
+        }
+
+        uint Compute1DGaussianFilterKernel(Vector2[] OutOffsetAndWeight, uint SampleCountMax, float KernelRadius)
+        {
+            float ClampedKernelRadius = GetClampedKernelRadius(SampleCountMax, KernelRadius);
+            
+            int IntegerKernelRadius = GetIntegerKernelRadius(SampleCountMax, KernelRadius);
+            
+            uint SampleCount = 0;
+            float WeightSum = 0.0f;
+
+            for (int SampleIndex = -IntegerKernelRadius; SampleIndex <= IntegerKernelRadius; SampleIndex += 2)
+            {
+                float Weight0 = NormalDistributionUnscaled(SampleIndex, ClampedKernelRadius);
+                float Weight1 = 0.0f;
+                
+                // We use the bilinear filter optimization for gaussian blur. However, we don't want to bias the
+                // last sample off the edge of the filter kernel, so the very last tap just is on the pixel center.
+                if(SampleIndex != IntegerKernelRadius)
+                {
+                    Weight1 = NormalDistributionUnscaled(SampleIndex + 1, ClampedKernelRadius);
+                }
+                
+                float TotalWeight = Weight0 + Weight1;
+                OutOffsetAndWeight[SampleCount].x = SampleIndex + (Weight1 / TotalWeight);
+                OutOffsetAndWeight[SampleCount].y = TotalWeight;
+                WeightSum += TotalWeight;
+                SampleCount++;
+            }
+            
+            // Normalize blur weights.
+            float WeightSumInverse = 1.0f / WeightSum;
+            for (uint SampleIndex = 0; SampleIndex < SampleCount; ++SampleIndex)
+            {
+                OutOffsetAndWeight[SampleIndex].y *= WeightSumInverse;
+            }
+            return SampleCount;
+        }
+        
+        void SetupUEBloom(CommandBuffer cmd, RTHandle source, Material uberMaterial)
+        {
+            int tw = m_Descriptor.width >> 1;
+            int th = m_Descriptor.height >> 1;
+            
+            var bloomMaterial = m_Materials.ueBloom;
+            
+            float threshold = Mathf.GammaToLinearSpace(m_Bloom.threshold.value);
+            CoreUtils.SetKeyword(bloomMaterial, "_USE_THRESHOLD", threshold > 0);
+            bloomMaterial.SetFloat(ShaderConstants._BloomThreshold, threshold);
+            
+            // Prefilter
+            var desc = GetCompatibleDescriptor(tw, th, m_DefaultHDRFormat);
+            for (int i = 0; i < 6; i++)
+            {
+                RenderingUtils.ReAllocateIfNeeded(ref m_BloomMipDown[i], desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: m_BloomMipDown[i].name);
+                RenderingUtils.ReAllocateIfNeeded(ref m_BloomMipUp[i], desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: m_BloomMipUp[i].name);
+                desc.width = Mathf.Max(1, desc.width >> 1);
+                desc.height = Mathf.Max(1, desc.height >> 1);
+            }
+            
+            Blitter.BlitCameraTexture(cmd, source, m_BloomMipDown[0], RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, bloomMaterial, 0);
+
+            // Mip downsample
+            var lastDown = m_BloomMipDown[0];
+            for (int i = 1; i < 6; i++)
+            {
+                var mipDown = m_BloomMipDown[i];
+                Blitter.BlitCameraTexture(cmd, lastDown, mipDown,  RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, bloomMaterial, 1);
+                
+                lastDown = mipDown;
+            }
+            
+            // Mip upsample & Blur
+            BloomStage[] bloomStages = new BloomStage[]
+            {
+                new BloomStage { Size = m_Bloom.bloom6Size.value, Tint = m_Bloom.bloom6Tint.value},
+                new BloomStage { Size = m_Bloom.bloom5Size.value, Tint = m_Bloom.bloom5Tint.value},
+                new BloomStage { Size = m_Bloom.bloom4Size.value, Tint = m_Bloom.bloom4Tint.value},
+                new BloomStage { Size = m_Bloom.bloom3Size.value, Tint = m_Bloom.bloom3Tint.value},
+                new BloomStage { Size = m_Bloom.bloom2Size.value, Tint = m_Bloom.bloom2Tint.value},
+                new BloomStage { Size = m_Bloom.bloom1Size.value, Tint = m_Bloom.bloom1Tint.value}
+            };
+
+            for (int i = 0, sourceIndex = 5; i < 6; i++, sourceIndex--)
+            {
+                BloomStage stage = bloomStages[i];
+
+                var sourceTex = m_BloomMipDown[sourceIndex];
+                var sourceTexWidth = sourceTex.rt.width;
+                var sourceTexHeight = sourceTex.rt.height;
+                
+                float kernelSizePercent = stage.Size * m_Bloom.bloomSizeScale.value;
+                float blurRadius = sourceTexWidth * kernelSizePercent * 0.01f * 0.5f;
+                
+                uint sampleCountMax = 32;
+                // Horizontal Pass
+                {
+                    Vector2[] offsetAndWeight = new Vector2[32];
+                    Vector4[] sampleWeights = new Vector4[32];
+                    Vector4[] sampleOffsets = new Vector4[32];
+                
+                    uint sampleCount = Compute1DGaussianFilterKernel(offsetAndWeight, sampleCountMax, blurRadius);
+                    
+                    // Weights multiplied by a white tint.
+                    for (uint j = 0; j < sampleCount; ++j)
+                    {
+                        float Weight = offsetAndWeight[j].y;
+                
+                        sampleWeights[j] = new Vector4(Weight, Weight, Weight, Weight);
+                    }
+                
+                    for (uint j = 0; j < sampleCount; ++j)
+                    {
+                        float Offset = offsetAndWeight[j].x;
+                
+                        sampleOffsets[j] = new Vector4(1.0f / sourceTexWidth * Offset, 0.0f);
+                    }
+                    CoreUtils.SetKeyword(cmd, "_COMBINE_ADDITIVE", false);
+                    cmd.SetGlobalInt(ShaderConstants._SampleCount, (int)sampleCount);
+                    cmd.SetGlobalVectorArray(ShaderConstants._SampleWeights, sampleWeights);
+                    cmd.SetGlobalVectorArray(ShaderConstants._SampleOffsets, sampleOffsets);
+                    Blitter.BlitCameraTexture(cmd, sourceTex, m_BloomMipUp[sourceIndex], bloomMaterial, 2);
+                }
+                
+                // Vertical Pass
+                {
+                    Vector2[] offsetAndWeight = new Vector2[32];
+                    Vector4[] sampleWeights = new Vector4[32];
+                    Vector4[] sampleOffsets = new Vector4[32];
+                        
+                    uint SampleCount = Compute1DGaussianFilterKernel(offsetAndWeight, sampleCountMax, blurRadius);
+                        
+                    // Weights multiplied by a input tint color.
+                    for (uint j = 0; j < SampleCount; ++j)
+                    {
+                        float Weight = offsetAndWeight[j].y;
+                        
+                        sampleWeights[j] = stage.Tint * m_Bloom.intensity.value * Weight;
+                    }
+                        
+                    for (uint j = 0; j < SampleCount; ++j)
+                    {
+                        float Offset = offsetAndWeight[j].x;
+                        
+                        sampleOffsets[j] = new Vector4(0, 1.0f / sourceTexHeight * Offset);
+                    }
+
+                    if (i > 0)
+                    {
+                        cmd.SetGlobalTexture(ShaderConstants._SourceTexLowMip, m_BloomMipDown[sourceIndex + 1]);
+                        CoreUtils.SetKeyword(cmd,"_COMBINE_ADDITIVE", true);
+                    }
+                    else
+                    {
+                        CoreUtils.SetKeyword(cmd,"_COMBINE_ADDITIVE", false);
+                    }
+                    
+                    cmd.SetGlobalInt(ShaderConstants._SampleCount, (int)SampleCount);
+                    cmd.SetGlobalVectorArray(ShaderConstants._SampleWeights, sampleWeights);
+                    cmd.SetGlobalVectorArray(ShaderConstants._SampleOffsets, sampleOffsets);
+                    Blitter.BlitCameraTexture(cmd, m_BloomMipUp[sourceIndex], sourceTex, bloomMaterial, 2);
+                }
+            }
+            
+            cmd.SetGlobalTexture(ShaderConstants._Bloom_Texture, m_BloomMipDown[0]);
+            // Setup lens dirtiness on uber
+            // Keep the aspect ratio correct & center the dirt texture, we don't want it to be
+            // stretched or squashed
+            var dirtTexture = m_Bloom.dirtTexture.value == null ? Texture2D.blackTexture : m_Bloom.dirtTexture.value;
+            float dirtRatio = dirtTexture.width / (float)dirtTexture.height;
+            float screenRatio = m_Descriptor.width / (float)m_Descriptor.height;
+            var dirtScaleOffset = new Vector4(1f, 1f, 0f, 0f);
+            float dirtIntensity = m_Bloom.dirtIntensity.value;
+
+            if (dirtRatio > screenRatio)
+            {
+                dirtScaleOffset.x = screenRatio / dirtRatio;
+                dirtScaleOffset.z = (1f - dirtScaleOffset.x) * 0.5f;
+            }
+            else if (screenRatio > dirtRatio)
+            {
+                dirtScaleOffset.y = dirtRatio / screenRatio;
+                dirtScaleOffset.w = (1f - dirtScaleOffset.y) * 0.5f;
+            }
+
+            uberMaterial.SetVector(ShaderConstants._LensDirt_Params, dirtScaleOffset);
+            uberMaterial.SetFloat(ShaderConstants._LensDirt_Intensity, dirtIntensity);
+            uberMaterial.SetTexture(ShaderConstants._LensDirt_Texture, dirtTexture);
+            
+            uberMaterial.EnableKeyword(dirtIntensity > 0f ? ShaderKeywordStrings.UEBloomDirt : ShaderKeywordStrings.UEBloom);
+        }
+
 #endregion
 
 #region Lens Distortion
@@ -1594,6 +1837,7 @@ namespace UnityEngine.Rendering.Universal
             public readonly Material cameraMotionBlur;
             public readonly Material paniniProjection;
             public readonly Material bloom;
+            public readonly Material ueBloom;
             public readonly Material temporalAntialiasing;
             public readonly Material scalingSetup;
             public readonly Material easu;
@@ -1614,6 +1858,7 @@ namespace UnityEngine.Rendering.Universal
                 cameraMotionBlur = Load(data.shaders.cameraMotionBlurPS);
                 paniniProjection = Load(data.shaders.paniniProjectionPS);
                 bloom = Load(data.shaders.bloomPS);
+                ueBloom = Load(data.shaders.ueBloomPS);
                 temporalAntialiasing = Load(data.shaders.temporalAntialiasingPS);
                 scalingSetup = Load(data.shaders.scalingSetupPS);
                 easu = Load(data.shaders.easuPS);
@@ -1719,7 +1964,12 @@ namespace UnityEngine.Rendering.Universal
             public static readonly int _FilmShoulder = Shader.PropertyToID("_FilmShoulder");
             public static readonly int _FilmBlackClip = Shader.PropertyToID("_FilmBlackClip");
             public static readonly int _FilmWhiteClip = Shader.PropertyToID("_FilmWhiteClip");
-
+            
+            public static readonly int _BloomThreshold = Shader.PropertyToID("_BloomThreshold");
+            public static readonly int _SampleCount = Shader.PropertyToID("_SampleCount");
+            public static readonly int _SampleOffsets = Shader.PropertyToID("_SampleOffsets");
+            public static readonly int _SampleWeights = Shader.PropertyToID("_SampleWeights");
+            
             public static int[] _BloomMipUp;
             public static int[] _BloomMipDown;
         }

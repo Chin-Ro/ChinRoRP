@@ -5,6 +5,7 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         #pragma multi_compile_local_fragment _ _DISTORTION
         #pragma multi_compile_local_fragment _ _CHROMATIC_ABERRATION
         #pragma multi_compile_local_fragment _ _BLOOM_LQ _BLOOM_HQ _BLOOM_LQ_DIRT _BLOOM_HQ_DIRT
+        #pragma multi_compile_local_fragment _ _UE_BLOOM _UE_BLOOM_DIRT
         #pragma multi_compile_local_fragment _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL _TONEMAP_GRANTURISMO _TONEMAP_FILMIC
         #pragma multi_compile_local_fragment _ _FILM_GRAIN
         #pragma multi_compile_local_fragment _ _DITHERING
@@ -38,6 +39,14 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
             #if _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT
                 #define BLOOM_DIRT
             #endif
+        #endif
+
+        #if _UE_BLOOM || _UE_BLOOM_DIRT
+            #define UE_BLOOM
+            #if _UE_BLOOM_DIRT
+                #define UE_BLOOM_DIRT
+            #endif
+        
         #endif
 
         TEXTURE2D_X(_Bloom_Texture);
@@ -206,6 +215,38 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 color += bloom.xyz * BloomTint;
 
                 #if defined(BLOOM_DIRT)
+                {
+                    // UVs for the dirt texture should be DistortUV(uv * DirtScale + DirtOffset) but
+                    // considering we use a cover-style scale on the dirt texture the difference
+                    // isn't massive so we chose to save a few ALUs here instead in case lens
+                    // distortion is active.
+                    half3 dirt = SAMPLE_TEXTURE2D(_LensDirt_Texture, sampler_LinearClamp, uvDistorted * LensDirtScale + LensDirtOffset).xyz;
+                    dirt *= LensDirtIntensity;
+                    color += dirt * bloom.xyz;
+                }
+                #endif
+            }
+            #endif
+
+            #if defined(UE_BLOOM)
+            {
+                float2 uvBloom = uvDistorted;
+                #if defined(SUPPORTS_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+                UNITY_BRANCH if (_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+                {
+                    uvBloom = RemapFoveatedRenderingNonUniformToLinear(uvBloom);
+                }
+                #endif
+                
+                half4 bloom = SAMPLE_TEXTURE2D_X(_Bloom_Texture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(uvBloom));
+                
+                #if UNITY_COLORSPACE_GAMMA
+                    bloom.xyz *= bloom.xyz; // γ to linear
+                #endif
+
+                color += bloom.xyz;
+
+                #if defined(UE_BLOOM_DIRT)
                 {
                     // UVs for the dirt texture should be DistortUV(uv * DirtScale + DirtOffset) but
                     // considering we use a cover-style scale on the dirt texture the difference

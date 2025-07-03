@@ -1174,12 +1174,16 @@ namespace UnityEngine.Rendering.Universal
 
         /// <summary> Keyword used for high quality Bloom. </summary>
         public const string BloomHQ = "_BLOOM_HQ";
+        
+        public const string UEBloom = "_UE_BLOOM";
 
         /// <summary> Keyword used for low quality Bloom dirt. </summary>
         public const string BloomLQDirt = "_BLOOM_LQ_DIRT";
 
         /// <summary> Keyword used for high quality Bloom dirt. </summary>
         public const string BloomHQDirt = "_BLOOM_HQ_DIRT";
+        
+        public const string UEBloomDirt = "_UE_BLOOM_DIRT";
 
         /// <summary> Keyword used for RGBM format for Bloom. </summary>
         public const string UseRGBM = "_USE_RGBM";

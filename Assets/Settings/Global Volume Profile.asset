@@ -28,53 +28,6 @@ MonoBehaviour:
   rounded:
     m_OverrideState: 1
     m_Value: 0
---- !u!114 &-3541461695964594706
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0b2db86121404754db890f4c8dfe81b2, type: 3}
-  m_Name: Bloom
-  m_EditorClassIdentifier: 
-  active: 0
-  skipIterations:
-    m_OverrideState: 1
-    m_Value: 1
-  threshold:
-    m_OverrideState: 1
-    m_Value: 0.9
-  intensity:
-    m_OverrideState: 1
-    m_Value: 1
-  scatter:
-    m_OverrideState: 1
-    m_Value: 0.7
-  clamp:
-    m_OverrideState: 1
-    m_Value: 65472
-  tint:
-    m_OverrideState: 1
-    m_Value: {r: 1, g: 1, b: 1, a: 1}
-  highQualityFiltering:
-    m_OverrideState: 1
-    m_Value: 0
-  downscale:
-    m_OverrideState: 1
-    m_Value: 0
-  maxIterations:
-    m_OverrideState: 1
-    m_Value: 6
-  dirtTexture:
-    m_OverrideState: 1
-    m_Value: {fileID: 0}
-    dimension: 1
-  dirtIntensity:
-    m_OverrideState: 1
-    m_Value: 0
 --- !u!114 &-3067526610303405058
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -90,7 +43,7 @@ MonoBehaviour:
   active: 1
   mode:
     m_OverrideState: 1
-    m_Value: 3
+    m_Value: 4
   neutralHDRRangeReductionMode:
     m_OverrideState: 0
     m_Value: 2
@@ -115,6 +68,21 @@ MonoBehaviour:
   maxNits:
     m_OverrideState: 0
     m_Value: 1000
+  slope:
+    m_OverrideState: 0
+    m_Value: 0.88
+  toe:
+    m_OverrideState: 0
+    m_Value: 0.55
+  shoulder:
+    m_OverrideState: 0
+    m_Value: 0.26
+  blackClip:
+    m_OverrideState: 0
+    m_Value: 0
+  whiteClip:
+    m_OverrideState: 0
+    m_Value: 0.04
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -128,11 +96,10 @@ MonoBehaviour:
   m_Name: Global Volume Profile
   m_EditorClassIdentifier: 
   components:
-  - {fileID: -3541461695964594706}
+  - {fileID: 891436657261711682}
   - {fileID: -3067526610303405058}
   - {fileID: -8724867386519579151}
-  - {fileID: 6977794495347784894}
---- !u!114 &6977794495347784894
+--- !u!114 &891436657261711682
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -141,22 +108,83 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 66f335fb1ffd8684294ad653bf1c7564, type: 3}
-  m_Name: ColorAdjustments
+  m_Script: {fileID: 11500000, guid: 0b2db86121404754db890f4c8dfe81b2, type: 3}
+  m_Name: Bloom
   m_EditorClassIdentifier: 
   active: 1
-  postExposure:
-    m_OverrideState: 0
+  skipIterations:
+    m_OverrideState: 1
+    m_Value: 1
+  bloomMode:
+    m_OverrideState: 1
+    m_Value: 1
+  threshold:
+    m_OverrideState: 1
     m_Value: 0
-  contrast:
-    m_OverrideState: 0
-    m_Value: 0
-  colorFilter:
-    m_OverrideState: 0
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0.625
+  scatter:
+    m_OverrideState: 1
+    m_Value: 0.7
+  clamp:
+    m_OverrideState: 1
+    m_Value: 65472
+  tint:
+    m_OverrideState: 1
     m_Value: {r: 1, g: 1, b: 1, a: 1}
-  hueShift:
-    m_OverrideState: 0
+  highQualityFiltering:
+    m_OverrideState: 1
     m_Value: 0
-  saturation:
-    m_OverrideState: 0
+  downscale:
+    m_OverrideState: 1
+    m_Value: 0
+  maxIterations:
+    m_OverrideState: 1
+    m_Value: 6
+  bloomSizeScale:
+    m_OverrideState: 1
+    m_Value: 4
+  bloom1Size:
+    m_OverrideState: 1
+    m_Value: 0.3
+  bloom2Size:
+    m_OverrideState: 1
+    m_Value: 1
+  bloom3Size:
+    m_OverrideState: 1
+    m_Value: 2
+  bloom4Size:
+    m_OverrideState: 1
+    m_Value: 10
+  bloom5Size:
+    m_OverrideState: 1
+    m_Value: 30
+  bloom6Size:
+    m_OverrideState: 1
+    m_Value: 64
+  bloom1Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.3465, g: 0.3465, b: 0.3465, a: 1}
+  bloom2Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.138, g: 0.138, b: 0.138, a: 1}
+  bloom3Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.1176, g: 0.1176, b: 0.1176, a: 1}
+  bloom4Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.066, g: 0.066, b: 0.066, a: 1}
+  bloom5Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.066, g: 0.066, b: 0.066, a: 1}
+  bloom6Tint:
+    m_OverrideState: 1
+    m_Value: {r: 0.061, g: 0.061, b: 0.061, a: 1}
+  dirtTexture:
+    m_OverrideState: 1
+    m_Value: {fileID: 0}
+    dimension: 1
+  dirtIntensity:
+    m_OverrideState: 1
     m_Value: 0

@@ -18,6 +18,12 @@ namespace UnityEngine.Rendering.Universal
         Quarter,
     }
 
+    public enum BloomMode
+    {
+        Unity,
+        UE,
+    }
+
     /// <summary>
     /// A volume component that holds settings for the Bloom effect.
     /// </summary>
@@ -25,6 +31,12 @@ namespace UnityEngine.Rendering.Universal
     [URPHelpURL("post-processing-bloom")]
     public sealed partial class Bloom : VolumeComponent, IPostProcessComponent
     {
+        /// <summary>
+        /// Unity Or UE BloomMode.
+        /// </summary>
+        [Header("Mode")]
+        public BloomModeParameter bloomMode = new BloomModeParameter(BloomMode.UE, false);
+        
         /// <summary>
         /// Set the level of brightness to filter out pixels under this level.
         /// This value is expressed in gamma-space.
@@ -40,6 +52,7 @@ namespace UnityEngine.Rendering.Universal
         [Tooltip("Strength of the bloom filter.")]
         public MinFloatParameter intensity = new MinFloatParameter(0f, 0f);
 
+        // Unity Bloom
         /// <summary>
         /// Controls the extent of the veiling effect.
         /// </summary>
@@ -77,6 +90,21 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         [Tooltip("The maximum number of iterations in the effect processing sequence."), AdditionalProperty]
         public ClampedIntParameter maxIterations = new ClampedIntParameter(6, 2, 8);
+         
+        // UEBloom
+        public ClampedFloatParameter bloomSizeScale = new ClampedFloatParameter(4.0f, 0.0f, 64.0f);
+        public ClampedFloatParameter bloom1Size = new ClampedFloatParameter(0.3f, 0.0f, 4.0f);
+        public ClampedFloatParameter bloom2Size = new ClampedFloatParameter(1f, 0.0f, 8.0f);
+        public ClampedFloatParameter bloom3Size = new ClampedFloatParameter(2f, 0.0f, 16.0f);
+        public ClampedFloatParameter bloom4Size = new ClampedFloatParameter(10f, 0.0f, 32.0f);
+        public ClampedFloatParameter bloom5Size = new ClampedFloatParameter(30f, 0.0f, 64.0f);
+        public ClampedFloatParameter bloom6Size = new ClampedFloatParameter(64f, 0.0f, 128.0f);
+        public ColorParameter bloom1Tint = new ColorParameter(new Color(0.3465f, 0.3465f, 0.3465f), false, false, true);
+        public ColorParameter bloom2Tint = new ColorParameter(new Color(0.138f, 0.138f, 0.138f), false, false, true);
+        public ColorParameter bloom3Tint = new ColorParameter(new Color(0.1176f, 0.1176f, 0.1176f), false, false, true);
+        public ColorParameter bloom4Tint = new ColorParameter(new Color(0.066f, 0.066f, 0.066f), false, false, true);
+        public ColorParameter bloom5Tint = new ColorParameter(new Color(0.066f, 0.066f, 0.066f), false, false, true);
+        public ColorParameter bloom6Tint = new ColorParameter(new Color(0.061f, 0.061f, 0.061f), false, false, true);
 
         /// <summary>
         /// Specifies a Texture to add smudges or dust to the bloom effect.
@@ -110,5 +138,11 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="value">The initial value to store in the parameter.</param>
         /// <param name="overrideState">The initial override state for the parameter.</param>
         public DownscaleParameter(BloomDownscaleMode value, bool overrideState = false) : base(value, overrideState) { }
+    }
+
+    [Serializable]
+    public sealed class BloomModeParameter : VolumeParameter<BloomMode>
+    {
+        public BloomModeParameter(BloomMode value, bool overrideState = false) : base(value, overrideState) { }
     }
 }
