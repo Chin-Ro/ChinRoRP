@@ -87,7 +87,7 @@
             HLSLPROGRAM
                 #pragma vertex Vert
                 #pragma fragment BloomSetupPS
-                #pragma shader_feature_local_fragment _USE_THRESHOLD
+                #pragma multi_compile_local_fragment _ _USE_THRESHOLD
             ENDHLSL
         }
 
