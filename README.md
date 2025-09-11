@@ -1,5 +1,5 @@
 # ChinRoRP
-Graphics features based on **Universal RenderPipeline** with Unity *2022.3.42f1*.
+Graphics features based on **Universal RenderPipeline** with **Unity 2022.3.42f1**.
 
 ## Features
 
