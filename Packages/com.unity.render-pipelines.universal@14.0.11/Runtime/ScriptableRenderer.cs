@@ -177,6 +177,12 @@ namespace UnityEngine.Rendering.Universal
                 Matrix4x4 cameraToWorldMatrix = worldToCameraMatrix.inverse;
                 cmd.SetGlobalMatrix(ShaderPropertyId.worldToCameraMatrix, worldToCameraMatrix);
                 cmd.SetGlobalMatrix(ShaderPropertyId.cameraToWorldMatrix, cameraToWorldMatrix);
+                
+                Vector4 resolution = new Vector4(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height,
+                    1.0f / cameraData.cameraTargetDescriptor.width, 1.0f / cameraData.cameraTargetDescriptor.height);
+                float gpuProjAspect = UniversalUtils.ProjectionMatrixAspect(projectionMatrix);
+                Matrix4x4 pixelCoordToViewDirMatrix = ComputePixelCoordToWorldSpaceViewDirectionMatrix(cameraData.camera, projectionMatrix, worldToCameraMatrix, resolution, gpuProjAspect);
+                cmd.SetGlobalMatrix(ShaderPropertyId.pixelCoordToViewMatrix, pixelCoordToViewDirMatrix);
 
                 cmd.SetGlobalMatrix(ShaderPropertyId.inverseViewMatrix, inverseViewMatrix);
                 cmd.SetGlobalMatrix(ShaderPropertyId.inverseProjectionMatrix, inverseProjectionMatrix);
@@ -184,6 +190,19 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // TODO: Add SetPerCameraClippingPlaneProperties here once we are sure it correctly behaves in overlay camera for some time
+        }
+
+        private static Matrix4x4 ComputePixelCoordToWorldSpaceViewDirectionMatrix(Camera camera, Matrix4x4 projectionMatrix, Matrix4x4 viewMatrix, Vector4 resolution, float aspect)
+        {
+            float verticalFoV = camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
+            if (!camera.usePhysicalProperties)
+            {
+                verticalFoV = Mathf.Atan(-1.0f / GL.GetGPUProjectionMatrix(projectionMatrix, false)[1, 1]) * 2;
+            }
+                
+            Vector2 lensShift = camera.GetGateFittedLensShift();
+            
+            return UniversalUtils.ComputePixelCoordToWorldSpaceViewDirectionMatrix(verticalFoV, lensShift, resolution, viewMatrix, false, aspect, camera.orthographic);
         }
 
         /// <summary>

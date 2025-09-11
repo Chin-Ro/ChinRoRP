@@ -986,6 +986,7 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int inverseCameraProjectionMatrix = Shader.PropertyToID("unity_CameraInvProjection");
         public static readonly int worldToCameraMatrix = Shader.PropertyToID("unity_WorldToCamera");
         public static readonly int cameraToWorldMatrix = Shader.PropertyToID("unity_CameraToWorld");
+        public static readonly int pixelCoordToViewMatrix = Shader.PropertyToID("_PixelCoordToViewDirWS");
 
         public static readonly int shadowBias = Shader.PropertyToID("_ShadowBias");
         public static readonly int lightDirection = Shader.PropertyToID("_LightDirection");

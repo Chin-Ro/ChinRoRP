@@ -94,6 +94,7 @@ float4x4 unity_CameraProjection;
 float4x4 unity_CameraInvProjection;
 float4x4 unity_WorldToCamera;
 float4x4 unity_CameraToWorld;
+float4x4 _PixelCoordToViewDirWS;
 #endif
 
 // ----------------------------------------------------------------------------
