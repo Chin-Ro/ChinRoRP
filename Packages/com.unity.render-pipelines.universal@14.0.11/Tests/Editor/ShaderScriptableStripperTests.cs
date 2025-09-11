@@ -2077,6 +2077,8 @@ namespace ShaderStrippingAndPrefiltering
                 ShaderKeywordStrings.BloomHQDirt,
                 ShaderKeywordStrings.UEBloomDirt,
                 ShaderKeywordStrings.TonemapACES,
+                ShaderKeywordStrings.TonemapFilmic,
+                ShaderKeywordStrings.TonemapGranTurismo,
                 ShaderKeywordStrings.TonemapNeutral,
                 ShaderKeywordStrings.FilmGrain,
             };
@@ -2232,6 +2234,36 @@ namespace ShaderStrippingAndPrefiltering
 
             helper = new TestHelper(shader, ShaderFeatures.None, volumeFeatures:VolumeFeatures.ToneMapping);
             TestHelper.s_EnabledKeywords = new List<string>() {ShaderKeywordStrings.TonemapNeutral};
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.IsFalse(helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+            
+            // Tonemap Filmic
+            helper = new TestHelper(shader, ShaderFeatures.None);
+            TestHelper.s_EnabledKeywords = new List<string>() {ShaderKeywordStrings.TonemapFilmic};
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.AreEqual(isCorrectShader, helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+
+            helper = new TestHelper(shader, ShaderFeatures.None, volumeFeatures:VolumeFeatures.ToneMapping);
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.IsFalse(helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+
+            helper = new TestHelper(shader, ShaderFeatures.None, volumeFeatures:VolumeFeatures.ToneMapping);
+            TestHelper.s_EnabledKeywords = new List<string>() {ShaderKeywordStrings.TonemapFilmic};
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.IsFalse(helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+            
+            // Tonemap Gran Turismo
+            helper = new TestHelper(shader, ShaderFeatures.None);
+            TestHelper.s_EnabledKeywords = new List<string>() {ShaderKeywordStrings.TonemapGranTurismo};
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.AreEqual(isCorrectShader, helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+
+            helper = new TestHelper(shader, ShaderFeatures.None, volumeFeatures:VolumeFeatures.ToneMapping);
+            TestHelper.s_PassKeywords = passKeywords;
+            helper.IsFalse(helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
+
+            helper = new TestHelper(shader, ShaderFeatures.None, volumeFeatures:VolumeFeatures.ToneMapping);
+            TestHelper.s_EnabledKeywords = new List<string>() {ShaderKeywordStrings.TonemapGranTurismo};
             TestHelper.s_PassKeywords = passKeywords;
             helper.IsFalse(helper.stripper.StripVolumeFeatures_UberPostShader(ref helper.data));
 

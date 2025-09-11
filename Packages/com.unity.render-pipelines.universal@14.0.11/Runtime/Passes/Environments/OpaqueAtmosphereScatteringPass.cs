@@ -18,7 +18,6 @@ namespace UnityEngine.Rendering.Universal
 
         internal void Setup(ShaderVariablesEnvironments shaderVariables)
         {
-            ConfigureInput(ScriptableRenderPassInput.Depth);
             m_ShaderVariablesEnvironments = shaderVariables;
         }
 

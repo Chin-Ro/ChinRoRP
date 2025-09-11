@@ -177,6 +177,8 @@ namespace UnityEditor.Rendering.Universal
         LocalKeyword m_HdrGrading;
         LocalKeyword m_ToneMapACES;
         LocalKeyword m_ToneMapNeutral;
+        LocalKeyword m_ToneMapFilmic;
+        LocalKeyword m_ToneMapGranTurismo;
         LocalKeyword m_FilmGrain;
         LocalKeyword m_ScreenCoordOverride;
         LocalKeyword m_EasuRcasAndHDRInput;
@@ -250,6 +252,8 @@ namespace UnityEditor.Rendering.Universal
             m_HdrGrading = TryGetLocalKeyword(shader, ShaderKeywordStrings.HDRGrading);
             m_ToneMapACES = TryGetLocalKeyword(shader, ShaderKeywordStrings.TonemapACES);
             m_ToneMapNeutral = TryGetLocalKeyword(shader, ShaderKeywordStrings.TonemapNeutral);
+            m_ToneMapFilmic = TryGetLocalKeyword(shader, ShaderKeywordStrings.TonemapFilmic);
+            m_ToneMapGranTurismo = TryGetLocalKeyword(shader, ShaderKeywordStrings.TonemapGranTurismo);
             m_FilmGrain = TryGetLocalKeyword(shader, ShaderKeywordStrings.FilmGrain);
             m_SHPerVertex = TryGetLocalKeyword(shader, ShaderKeywordStrings.EVALUATE_SH_VERTEX);
             m_SHMixed = TryGetLocalKeyword(shader, ShaderKeywordStrings.EVALUATE_SH_MIXED);
@@ -295,6 +299,12 @@ namespace UnityEditor.Rendering.Universal
                 return true;
 
             if (stripTool.StripMultiCompileKeepOffVariant(m_ToneMapNeutral, VolumeFeatures.ToneMapping))
+                return true;
+            
+            if (stripTool.StripMultiCompileKeepOffVariant(m_ToneMapFilmic, VolumeFeatures.ToneMapping))
+                return true;
+            
+            if (stripTool.StripMultiCompileKeepOffVariant(m_ToneMapGranTurismo, VolumeFeatures.ToneMapping))
                 return true;
 
             if (stripTool.StripMultiCompileKeepOffVariant(m_FilmGrain, VolumeFeatures.FilmGrain))

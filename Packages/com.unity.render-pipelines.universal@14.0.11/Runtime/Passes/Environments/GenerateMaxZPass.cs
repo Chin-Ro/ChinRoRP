@@ -30,18 +30,18 @@ namespace UnityEngine.Rendering.Universal
         private GenerateMaxZMaskPassData passData;
         private VBufferParameters[] vBufferParameters;
         
-        public GenerateMaxZPass(RenderPassEvent passEvent, EnvironmentsData data)
+        public GenerateMaxZPass(EnvironmentsData data)
         {
-            renderPassEvent = passEvent;
             passData = new GenerateMaxZMaskPassData
             {
                 generateMaxZCS = data.generateMaxZCS,
             };
         }
         
-        internal void Setup(in VBufferParameters[] m_vBufferParameters, ref RTHandle maxZMask)
+        internal void Setup(RenderPassEvent passEvent, bool isRendererDeferred, in VBufferParameters[] m_vBufferParameters, ref RTHandle maxZMask)
         {
-            ConfigureInput(ScriptableRenderPassInput.Depth);
+            renderPassEvent = passEvent;
+            if (!isRendererDeferred) ConfigureInput(ScriptableRenderPassInput.Depth);
             vBufferParameters = m_vBufferParameters;
             passData.dilatedMaxZBuffer = maxZMask;
         }

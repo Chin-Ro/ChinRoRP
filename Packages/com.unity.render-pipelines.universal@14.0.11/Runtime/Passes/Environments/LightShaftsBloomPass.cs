@@ -15,7 +15,7 @@ namespace UnityEngine.Rendering.Universal
         
         public void Setup()
         {
-            ConfigureInput(ScriptableRenderPassInput.Depth);
+            
         }
         
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)

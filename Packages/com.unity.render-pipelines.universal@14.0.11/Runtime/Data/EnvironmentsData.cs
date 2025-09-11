@@ -34,6 +34,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
 
         public ComputeShader generateMaxZCS;
+        public ComputeShader volumeVoxelizationCS;
         public Shader opaqueAtmosphericScatteringShader; 
     }
 }

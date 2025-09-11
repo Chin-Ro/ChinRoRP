@@ -1207,6 +1207,7 @@ namespace UnityEngine.Rendering.Universal
         /// <summary> Keyword used for GranTurismo Tonemapping. </summary>
         public const string TonemapGranTurismo = "_TONEMAP_GRANTURISMO";
         
+        /// <summary> Keyword used for Unreal Tonemapping. </summary>
         public const string TonemapFilmic = "_TONEMAP_FILMIC";
 
         /// <summary> Keyword used for Film Grain. </summary>

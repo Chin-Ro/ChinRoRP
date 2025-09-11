@@ -8,14 +8,14 @@ namespace UnityEngine.Rendering.Universal
 {
     public class VolumetricLightingPass : ScriptableRenderPass
     {
-        public VolumetricLightingPass(RenderPassEvent passEvent)
-        {
-            renderPassEvent = passEvent;
-        }
-        
-        public void Setup()
+        public VolumetricLightingPass()
         {
             
+        }
+        
+        public void Setup(RenderPassEvent passEvent)
+        {
+            renderPassEvent = passEvent;
         }
         
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)

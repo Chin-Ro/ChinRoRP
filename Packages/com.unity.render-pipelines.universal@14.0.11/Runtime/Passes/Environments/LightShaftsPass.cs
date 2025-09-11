@@ -15,7 +15,7 @@ namespace UnityEngine.Rendering.Universal
         
         public void Setup()
         {
-            ConfigureInput(ScriptableRenderPassInput.Depth);
+            
         }
 
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
