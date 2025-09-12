@@ -4,6 +4,9 @@
 //  环境渲染特性：雾效、光柱、体积雾
 //--------------------------------------------------------------------------------------------------------
 
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine.Experimental.Rendering;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -17,6 +20,9 @@ namespace UnityEngine.Rendering.Universal
         public EnvironmentsData environmentsData;
         public bool lightShafts = true;
         public bool volumetricLighting = true;
+        
+        [Range(1, 1024)]
+        public int maxLocalVolumetricFogOnScreen = 256;
         
         private RTHandle m_MaxZMask;
         private RTHandle m_VolumetricDensityBuffer;
@@ -32,9 +38,32 @@ namespace UnityEngine.Rendering.Universal
         private OpaqueAtmosphereScatteringPass m_OpaqueAtmosphereScatteringPass;
         private LightShaftsBloomPass m_LightShaftsBloomPass;
         
+        List<OrientedBBox> m_VisibleVolumeBounds = null;
+        List<LocalVolumetricFogEngineData> m_VisibleVolumeData = null;
+        List<LocalVolumetricFog> m_VisibleLocalVolumetricFogVolumes = null;
+        NativeArray<uint> m_VolumetricFogSortKeys;
+        NativeArray<uint> m_VolumetricFogSortKeysTemp;
+        internal const int k_MaxVisibleLocalVolumetricFogCount = 1024;
+        
+        const int k_VolumetricMaterialIndirectArgumentCount = 5;
+        const int k_VolumetricMaterialIndirectArgumentByteSize = k_VolumetricMaterialIndirectArgumentCount * sizeof(uint);
+        const int k_VolumetricFogPriorityMaxValue = 1048576; // 2^20 because there are 20 bits in the volumetric fog sort key
+        
+        ComputeBuffer m_VisibleVolumeBoundsBuffer = null;
+        GraphicsBuffer m_VolumetricMaterialDataBuffer = null;
+        GraphicsBuffer m_VolumetricMaterialIndexBuffer = null;
+        Material m_DefaultVolumetricFogMaterial = null;
+        
+        Vector4[] m_PackedCoeffs;
+        ZonalHarmonicsL2 m_PhaseZH;
+        Vector2[] m_xySeq;
+        
         private ShaderVariablesEnvironments m_ShaderVariablesEnvironment;
+        private ShaderVariablesVolumetric m_ShaderVariablesVolumetric;
         public static int frameCount => _frameCount;
         private static int _frameCount;
+
+        private bool volumetricHistoryIsValid = false;
 
         private VBufferParameters[] vBufferParams;
         
@@ -47,12 +76,16 @@ namespace UnityEngine.Rendering.Universal
                     AssetDatabase.LoadAssetAtPath<EnvironmentsData>("Packages/com.unity.render-pipelines.universal/Runtime/Data/EnvironmentsData.asset");
             }
 #endif
+            
             if (volumetricLighting)
             {
+                InitializeVolumetricLighting();
+                
                 m_GenerateMaxZPass ??= new GenerateMaxZPass(environmentsData);
                 m_ClearAndHeightFogVoxelizationPass ??= new ClearAndHeightFogVoxelizationPass(environmentsData);
                 m_FogVolumeVoxelizationPass ??= new FogVolumeVoxelizationPass();
                 m_VolumetricLightingPass ??= new VolumetricLightingPass();
+                m_ShaderVariablesVolumetric = new ShaderVariablesVolumetric();
             }
 
             if (lightShafts)
@@ -63,6 +96,36 @@ namespace UnityEngine.Rendering.Universal
 
             m_ShaderVariablesEnvironment = new ShaderVariablesEnvironments();
             m_OpaqueAtmosphereScatteringPass ??= new OpaqueAtmosphereScatteringPass(RenderPassEvent.AfterRenderingSkybox, environmentsData);
+
+        }
+        
+        void InitializeVolumetricLighting()
+        {
+            m_PackedCoeffs = new Vector4[7];
+            m_PhaseZH = new ZonalHarmonicsL2
+            {
+                coeffs = new float[3]
+            };
+
+            m_xySeq = new Vector2[7];
+            
+            m_VisibleVolumeBounds = new List<OrientedBBox>();
+            m_VisibleVolumeData = new List<LocalVolumetricFogEngineData>();
+            m_VisibleLocalVolumetricFogVolumes = new List<LocalVolumetricFog>();
+            m_VisibleVolumeBoundsBuffer = new ComputeBuffer(k_MaxVisibleLocalVolumetricFogCount, Marshal.SizeOf(typeof(OrientedBBox)));
+            int maxVolumeCountTimesViewCount = k_MaxVisibleLocalVolumetricFogCount * 2;
+            m_VolumetricMaterialDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, maxVolumeCountTimesViewCount, Marshal.SizeOf(typeof(VolumetricMaterialRenderingData)));
+            m_VolumetricMaterialIndexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, 3 * 4, sizeof(uint));
+            m_VolumetricFogSortKeys = new NativeArray<uint>(maxLocalVolumetricFogOnScreen, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            m_VolumetricFogSortKeysTemp = new NativeArray<uint>(maxLocalVolumetricFogOnScreen, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            // Index buffer for triangle fan with max 6 vertices
+            m_VolumetricMaterialIndexBuffer.SetData(new List<uint>{
+                0, 1, 2,
+                0, 2, 3,
+                0, 3, 4,
+                0, 4, 5
+            });
+            m_DefaultVolumetricFogMaterial = CoreUtils.CreateEngineMaterial(environmentsData.defaultFogVolumeShader);
         }
 
         public override void OnCameraPreCull(ScriptableRenderer renderer, in CameraData cameraData)
@@ -154,6 +217,7 @@ namespace UnityEngine.Rendering.Universal
 
         protected override void Dispose(bool disposing)
         {
+            CleanupVolumetricLighting();
             m_GenerateMaxZPass?.Dispose();
             m_GenerateMaxZPass = null;
             m_ClearAndHeightFogVoxelizationPass?.Dispose();
@@ -171,6 +235,23 @@ namespace UnityEngine.Rendering.Universal
             _frameCount = 0;
             vBufferParams = null;
             m_MaxZMask?.Release();
+        }
+        
+        void CleanupVolumetricLighting()
+        {
+            CoreUtils.SafeRelease(m_VisibleVolumeBoundsBuffer);
+            CoreUtils.SafeRelease(m_VolumetricMaterialIndexBuffer);
+            CoreUtils.SafeRelease(m_VolumetricMaterialDataBuffer);
+            CoreUtils.Destroy(m_DefaultVolumetricFogMaterial);
+
+            if (m_VolumetricFogSortKeys.IsCreated)
+                m_VolumetricFogSortKeys.Dispose();
+            if (m_VolumetricFogSortKeysTemp.IsCreated)
+                m_VolumetricFogSortKeysTemp.Dispose();
+
+            m_VisibleVolumeData = null; // free()
+            m_VisibleVolumeBounds = null; // free()
+            m_VisibleLocalVolumetricFogVolumes = null;
         }
     }
     

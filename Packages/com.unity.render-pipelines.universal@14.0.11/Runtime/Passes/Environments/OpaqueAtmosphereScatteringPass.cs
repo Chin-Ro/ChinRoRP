@@ -16,7 +16,7 @@ namespace UnityEngine.Rendering.Universal
             m_Material = Load(data.opaqueAtmosphericScatteringShader); 
         }
 
-        internal void Setup(ShaderVariablesEnvironments shaderVariables)
+        internal void Setup(in ShaderVariablesEnvironments shaderVariables)
         {
             m_ShaderVariablesEnvironments = shaderVariables;
         }

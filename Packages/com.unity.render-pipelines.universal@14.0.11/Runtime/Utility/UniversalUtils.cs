@@ -94,5 +94,39 @@ namespace UnityEngine.Rendering.Universal
                 ComputeViewportLimit(viewportSize.x, bufferSize.x),                 // Limit(x)
                 ComputeViewportLimit(viewportSize.y, bufferSize.y));                // Limit(y)
         }
+        
+        internal static float ComputZPlaneTexelSpacing(float planeDepth, float verticalFoV, float resolutionY)
+        {
+            float tanHalfVertFoV = Mathf.Tan(0.5f * verticalFoV);
+            return tanHalfVertFoV * (2.0f / resolutionY) * planeDepth;
+        }
+    }
+    
+    struct ZonalHarmonicsL2
+    {
+        public float[] coeffs; // Must have the size of 3
+
+        public static ZonalHarmonicsL2 GetHenyeyGreensteinPhaseFunction(float anisotropy)
+        {
+            float g = anisotropy;
+
+            var zh = new ZonalHarmonicsL2();
+            zh.coeffs = new float[3];
+
+            zh.coeffs[0] = 0.5f * Mathf.Sqrt(1.0f / Mathf.PI);
+            zh.coeffs[1] = 0.5f * Mathf.Sqrt(3.0f / Mathf.PI) * g;
+            zh.coeffs[2] = 0.5f * Mathf.Sqrt(5.0f / Mathf.PI) * g * g;
+
+            return zh;
+        }
+
+        public static void GetCornetteShanksPhaseFunction(ZonalHarmonicsL2 zh, float anisotropy)
+        {
+            float g = anisotropy;
+
+            zh.coeffs[0] = 0.282095f;
+            zh.coeffs[1] = 0.293162f * g * (4.0f + (g * g)) / (2.0f + (g * g));
+            zh.coeffs[2] = (0.126157f + 1.44179f * (g * g) + 0.324403f * (g * g) * (g * g)) / (2.0f + (g * g));
+        }
     }
 }

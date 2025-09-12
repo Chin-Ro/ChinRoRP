@@ -102,9 +102,11 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // Update size used to create volumetric buffers.
-            s_CurrentVolumetricBufferSize = new Vector3Int(Math.Max(s_CurrentVolumetricBufferSize.x, currentParams.viewportSize.x),
-                Math.Max(s_CurrentVolumetricBufferSize.y, currentParams.viewportSize.y),
-                Math.Max(s_CurrentVolumetricBufferSize.z, currentParams.viewportSize.z));
+            // s_CurrentVolumetricBufferSize = new Vector3Int(Math.Max(s_CurrentVolumetricBufferSize.x, currentParams.viewportSize.x),
+            //     Math.Max(s_CurrentVolumetricBufferSize.y, currentParams.viewportSize.y),
+            //     Math.Max(s_CurrentVolumetricBufferSize.z, currentParams.viewportSize.z));
+
+            s_CurrentVolumetricBufferSize = currentParams.viewportSize;
         }
         
         public static float MeanFreePathFromExtinction(float extinction)
@@ -138,6 +140,22 @@ namespace UnityEngine.Rendering.Universal
             // -d / H = Log[0.001]
             // H = d / -Log[0.001]
             return d * 0.144765f;
+        }
+        
+        private static float CornetteShanksPhasePartConstant(float anisotropy)
+        {
+            float g = anisotropy;
+
+            return (3.0f / (8.0f * Mathf.PI)) * (1.0f - g * g) / (2.0f + g * g);
+        }
+        
+        private static bool IsVolumetricReprojectionEnabled(CameraData camera)
+        {
+            bool a = Fog.IsVolumetricFogEnabled(camera);
+            // We only enable volumetric re projection if we are processing the game view or a scene view with animated materials on
+            bool b = camera.cameraType == CameraType.Game || (camera.cameraType == CameraType.SceneView && CoreUtils.AreAnimatedMaterialsEnabled(camera.camera));
+
+            return a && b;
         }
     }
     #endregion
@@ -362,8 +380,6 @@ namespace UnityEngine.Rendering.Universal
     
     struct ShaderVariablesVolumetric
     {
-        public Matrix4x4 _VBufferCoordToViewDirWS;
-
         public float _VBufferUnitDepthTexelSpacing;
         public uint _NumVisibleLocalVolumetricFog;
         public float _CornetteShanksConstant;
@@ -377,5 +393,14 @@ namespace UnityEngine.Rendering.Universal
         public Vector4 _VBufferHistoryViewportLimit;
         public Vector4 _VBufferPrevDistanceEncodingParams;
         public Vector4 _VBufferPrevDistanceDecodingParams;
+    }
+    
+    struct VolumetricMaterialRenderingData
+    {
+        public Vector4 viewSpaceBounds;
+        public uint startSliceIndex;
+        public uint sliceCount;
+        public uint padding0;
+        public uint padding1;
     }
 }

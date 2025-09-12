@@ -53,6 +53,13 @@ namespace UnityEngine.Rendering.Universal
             int frameIndex = EnvironmentsRenderFeature.frameCount;
             var currIdx = (frameIndex + 0) & 1;
             var currParams = vBufferParams[currIdx];
+
+            passData.viewCount = 1;
+            
+            passData.voxelizationKernel = 0;
+
+            var cvp = currParams.viewportSize;
+            passData.resolution = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
             
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, new ProfilingSampler("Clear And Height Fog Voxelization")))
