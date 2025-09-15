@@ -4,12 +4,6 @@
 //  体素化Buffer Pass
 //--------------------------------------------------------------------------------------------------------
 
-using System.Collections.Generic;
-using Unity.Collections;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
-
-//using UnityEngine.Experimental.Rendering.RenderGraphModule;
-
 namespace UnityEngine.Rendering.Universal
 {
     public class ClearAndHeightFogVoxelizationPass : ScriptableRenderPass
@@ -39,18 +33,19 @@ namespace UnityEngine.Rendering.Universal
             };
         }
         
-        internal void Setup(RenderPassEvent passEvent, VBufferParameters[] m_VBufferParameters, ref RTHandle volumetricDensityBuffer)
+        internal void Setup(ref RTHandle volumetricDensityBuffer, RenderPassEvent passEvent, in VBufferParameters[] m_VBufferParameters, in ShaderVariablesVolumetric m_ShaderVariablesVolumetric)
         {
             renderPassEvent = passEvent;
             passData.densityBuffer = volumetricDensityBuffer;
             vBufferParams = m_VBufferParameters;
+            passData.volumetricCB = m_ShaderVariablesVolumetric;
         }
         
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (!Fog.IsVolumetricFogEnabled(renderingData.cameraData)) return;
             
-            int frameIndex = EnvironmentsRenderFeature.frameCount;
+            int frameIndex = EnvironmentsRenderFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var currParams = vBufferParams[currIdx];
 
@@ -64,13 +59,17 @@ namespace UnityEngine.Rendering.Universal
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, new ProfilingSampler("Clear And Height Fog Voxelization")))
             {
+                var data = passData;
+                cmd.SetComputeTextureParam(data.voxelizationCS, data.voxelizationKernel, EnvironmentConstants._VBufferDensity, data.densityBuffer);
                 
+                ConstantBuffer.Push(cmd, data.volumetricCB, data.voxelizationCS, EnvironmentConstants._ShaderVariablesVolumetric);
+                cmd.DispatchCompute(data.voxelizationCS, data.voxelizationKernel, ((int)data.resolution.x + 7) / 8, ((int)data.resolution.y + 7) / 8, data.viewCount);
             }
         }
         
         public void Dispose()
         {
-            
+            passData = null;
         }
     }
 }

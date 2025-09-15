@@ -13,5 +13,9 @@ MonoBehaviour:
   m_Name: EnvironmentsData
   m_EditorClassIdentifier: 
   generateMaxZCS: {fileID: 7200000, guid: 130a3536cb5346ea907249607e311fbe, type: 3}
+  volumeVoxelizationCS: {fileID: 7200000, guid: 1437596b227b46d5b700e97a22bd9010,
+    type: 3}
   opaqueAtmosphericScatteringShader: {fileID: 4800000, guid: 71fe614c0d0243c8a42d35634c7a5ed3,
+    type: 3}
+  defaultFogVolumeShader: {fileID: 4800000, guid: f50700829487ca549a331926e80fe525,
     type: 3}

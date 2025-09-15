@@ -4,11 +4,11 @@
 //  环境渲染资源索引配置
 //--------------------------------------------------------------------------------------------------------
 
-using System;
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.ProjectWindowCallback;
 #endif
+using System;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -32,9 +32,10 @@ namespace UnityEngine.Rendering.Universal
             ProjectWindowUtil.StartNameEditingIfProjectWindowExists(0, CreateInstance<CreateEnvironmentsDataAsset>(), "EnvironmentsData.asset", null, null);
         }
 #endif
-
+        
         public ComputeShader generateMaxZCS;
         public ComputeShader volumeVoxelizationCS;
+        public ComputeShader volumetricMaterialCS;
         public Shader opaqueAtmosphericScatteringShader;
         public Shader defaultFogVolumeShader;
     }

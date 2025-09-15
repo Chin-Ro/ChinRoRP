@@ -38,7 +38,7 @@ namespace UnityEngine.Rendering.Universal
             };
         }
         
-        internal void Setup(RenderPassEvent passEvent, bool isRendererDeferred, in VBufferParameters[] m_vBufferParameters, ref RTHandle maxZMask)
+        internal void Setup(ref RTHandle maxZMask, RenderPassEvent passEvent, bool isRendererDeferred, in VBufferParameters[] m_vBufferParameters)
         {
             renderPassEvent = passEvent;
             if (!isRendererDeferred) ConfigureInput(ScriptableRenderPassInput.Depth);
@@ -65,7 +65,7 @@ namespace UnityEngine.Rendering.Universal
             passData.finalMaskSize.x = passData.intermediateMaskSize.x / 2;
             passData.finalMaskSize.y = passData.intermediateMaskSize.y / 2;
 
-            int frameIndex = EnvironmentsRenderFeature.frameCount;
+            int frameIndex = EnvironmentsRenderFeature.frameIndex;
             var currIdx = frameIndex & 1;
             
             if (vBufferParameters != null)

@@ -1,0 +1,118 @@
+//--------------------------------------------------------------------------------------------------
+// Definitions
+//--------------------------------------------------------------------------------------------------
+
+// #pragma enable_d3d11_debug_symbols
+#pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+#pragma kernel VolumeVoxelization
+#define GROUP_SIZE_1D     8
+
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/VolumetricLighting.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/ShaderVariablesEnvironments.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/UnrealEngineHeightFog.hlsl"
+
+// Returns the forward (up) direction of the current view in the world space.
+float3 GetViewUpDir()
+{
+    float4x4 viewMat = GetWorldToViewMatrix();
+    return viewMat[1].xyz;
+}
+
+//--------------------------------------------------------------------------------------------------
+// Inputs & outputs
+//--------------------------------------------------------------------------------------------------
+
+StructuredBuffer<OrientedBBox>            _VolumeBounds;
+StructuredBuffer<LocalVolumetricFogEngineData> _VolumeData;
+
+RW_TEXTURE3D(float4, _VBufferDensity); // RGB = sqrt(scattering), A = sqrt(extinction)
+
+//--------------------------------------------------------------------------------------------------
+// Implementation
+//--------------------------------------------------------------------------------------------------
+
+// Jittered ray with screen-space derivatives.
+struct JitteredRay
+{
+    float3 originWS;
+    float3 centerDirWS;
+    float3 jitterDirWS;
+    float3 xDirDerivWS;
+    float3 yDirDerivWS;
+};
+
+void FillVolumetricDensityBuffer(uint2 voxelCoord2D, JitteredRay ray)
+{
+    float t0 = DecodeLogarithmicDepthGeneralized(0, _VBufferDistanceDecodingParams);
+    float de = _VBufferRcpSliceCount; // Log-encoded distance between slices
+
+    for (uint slice = 0; slice < _VBufferSliceCount; slice++)
+    {
+        uint3 voxelCoord = uint3(voxelCoord2D, slice + _VBufferSliceCount * unity_StereoEyeIndex);
+
+        float e1 = slice * de + de; // (slice + 1) / sliceCount
+        float t1 = DecodeLogarithmicDepthGeneralized(e1, _VBufferDistanceDecodingParams);
+        float dt = t1 - t0;
+        float t  = t0 + 0.5 * dt;
+
+        float3 voxelCenterWS = ray.originWS + t * ray.centerDirWS;
+
+        // TODO: the fog value at the center is likely different from the average value across the voxel.
+        // Compute the average value.
+        float fragmentHeight   = voxelCenterWS.y;
+
+        float GlobalDensityFirst = CalculateRayOriginTerm(ExponentialFogParameters.x, ExponentialFogParameters.y,
+                                                      ExponentialFogParameters.z);
+        float GlobalDensitySecond = CalculateRayOriginTerm(ExponentialFogParameters2.x, ExponentialFogParameters2.y,
+                                                            ExponentialFogParameters2.z);
+        
+        // Start by sampling the height fog.
+        float  voxelExtinction = saturate((GlobalDensityFirst + GlobalDensitySecond) * 0.5 * _ExtinctionScale);
+        float3 voxelScattering = _HeightFogBaseScattering.xyz * voxelExtinction;
+
+        _VBufferDensity[voxelCoord] = float4(voxelScattering, voxelExtinction);
+
+        t0 = t1;
+    }
+}
+
+[numthreads(GROUP_SIZE_1D, GROUP_SIZE_1D, 1)]
+void VolumeVoxelization(uint3 dispatchThreadId : SV_DispatchThreadID,
+                        uint2 groupId          : SV_GroupID,
+                        uint2 groupThreadId    : SV_GroupThreadID)
+{
+    // Reminder: our voxels are sphere-capped right frustums (truncated right pyramids).
+    // The curvature of the front and back faces is quite gentle, so we can use
+    // the right frustum approximation (thus the front and the back faces are squares).
+    // Note, that since we still rely on the perspective camera model, pixels at the center
+    // of the screen correspond to larger solid angles than those at the edges.
+    // Basically, sizes of front and back faces depend on the XY coordinate.
+    // https://www.desmos.com/calculator/i3rkesvidk
+
+    float3 F = GetViewForwardDir();
+    float3 U = GetViewUpDir();
+
+    uint2 voxelCoord = dispatchThreadId.xy;
+    float2 centerCoord = voxelCoord + float2(0.5, 0.5);
+
+    // Compute a ray direction s.t. ViewSpace(rayDirWS).z = 1.
+    float3 rayDirWS       = mul(-float4(centerCoord, 1, 1), _PixelCoordToViewDirWS).xyz;
+    float3 rightDirWS     = cross(rayDirWS, U);
+    float  rcpLenRayDir   = rsqrt(dot(rayDirWS, rayDirWS));
+    float  rcpLenRightDir = rsqrt(dot(rightDirWS, rightDirWS));
+
+    JitteredRay ray;
+    ray.originWS    = GetCurrentViewPosition();
+    ray.centerDirWS = rayDirWS * rcpLenRayDir; // Normalize
+
+    float FdotD = dot(F, ray.centerDirWS);
+    float unitDistFaceSize = _VBufferUnitDepthTexelSpacing * FdotD * rcpLenRayDir;
+
+    ray.xDirDerivWS = rightDirWS * (rcpLenRightDir * unitDistFaceSize); // Normalize & rescale
+    ray.yDirDerivWS = cross(ray.xDirDerivWS, ray.centerDirWS); // Will have the length of 'unitDistFaceSize' by construction
+    ray.jitterDirWS = ray.centerDirWS; // TODO
+
+    FillVolumetricDensityBuffer(voxelCoord, ray);
+}

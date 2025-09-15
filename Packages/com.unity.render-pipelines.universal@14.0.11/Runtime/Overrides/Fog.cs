@@ -54,7 +54,7 @@ namespace UnityEngine.Rendering.Universal
         public ColorParameter albedo = new ColorParameter(Color.white);
         public ClampedFloatParameter extinctionScale = new ClampedFloatParameter(1.0f, 0.0f, 10.0f);
         public ClampedFloatParameter globalLightProbeDimmer = new ClampedFloatParameter(1.0f, 0.0f, 2.0f);
-        public MinFloatParameter depthExtent = new MinFloatParameter(100.0f, 0.1f);
+        public MinFloatParameter depthExtent = new MinFloatParameter(64.0f, 0.1f);
         public FogDenoisingModeParameter denoisingMode = new FogDenoisingModeParameter(FogDenoisingMode.Gaussian);
         public ClampedFloatParameter anisotropy = new ClampedFloatParameter(0.0f, -1.0f, 1.0f);
         [AdditionalProperty] public ClampedFloatParameter sliceDistributionUniformity = new ClampedFloatParameter(0.75f, 0, 1);

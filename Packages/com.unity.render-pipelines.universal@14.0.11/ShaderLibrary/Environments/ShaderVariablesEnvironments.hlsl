@@ -41,6 +41,17 @@ float4 _GlobalFogParam1;
 // z : volumetricFilteringEnabled
 // w : fogDirectionalOnly
 float4 _GlobalFogParam2;
+
+// VBuffer
+float4 _VBufferViewportSize;
+float4 _VBufferLightingViewportScale;
+float4 _VBufferLightingViewportLimit;
+float4 _VBufferDistanceEncodingParams;
+float4 _VBufferDistanceDecodingParams;
+uint _VBufferSliceCount;
+float _VBufferRcpSliceCount;
+float _VBufferRcpInstancedViewCount;
+float _VBufferLastSliceDist;
 CBUFFER_END
 
 #define _HeightFogBaseExtinction _HeightFogExponents.z;

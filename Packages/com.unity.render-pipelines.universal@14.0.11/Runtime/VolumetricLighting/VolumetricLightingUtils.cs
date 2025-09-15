@@ -5,6 +5,8 @@
 //--------------------------------------------------------------------------------------------------------
 
 using System;
+using Unity.Mathematics;
+using static Unity.Mathematics.math;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -89,7 +91,7 @@ namespace UnityEngine.Rendering.Universal
 
             var currentParams = ComputeVolumetricBufferParameters(universalCamera);
 
-            int frameIndex = EnvironmentsRenderFeature.frameCount;
+            int frameIndex = EnvironmentsRenderFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var prevIdx = (frameIndex + 1) & 1;
 
@@ -142,7 +144,7 @@ namespace UnityEngine.Rendering.Universal
             return d * 0.144765f;
         }
         
-        private static float CornetteShanksPhasePartConstant(float anisotropy)
+        static float CornetteShanksPhasePartConstant(float anisotropy)
         {
             float g = anisotropy;
 
@@ -156,6 +158,120 @@ namespace UnityEngine.Rendering.Universal
             bool b = camera.cameraType == CameraType.Game || (camera.cameraType == CameraType.SceneView && CoreUtils.AreAnimatedMaterialsEnabled(camera.camera));
 
             return a && b;
+        }
+        
+        // Ref: https://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
+        // The returned {x, y} coordinates (and all spheres) are all within the (-0.5, 0.5)^2 range.
+        // The pattern has been rotated by 15 degrees to maximize the resolution along X and Y:
+        // https://www.desmos.com/calculator/kcpfvltz7c
+        static void GetHexagonalClosePackedSpheres7(Vector2[] coords)
+        {
+            float r = 0.17054068870105443882f;
+            float d = 2 * r;
+            float s = r * Mathf.Sqrt(3);
+
+            // Try to keep the weighted average as close to the center (0.5) as possible.
+            //  (7)(5)    ( )( )    ( )( )    ( )( )    ( )( )    ( )(o)    ( )(x)    (o)(x)    (x)(x)
+            // (2)(1)(3) ( )(o)( ) (o)(x)( ) (x)(x)(o) (x)(x)(x) (x)(x)(x) (x)(x)(x) (x)(x)(x) (x)(x)(x)
+            //  (4)(6)    ( )( )    ( )( )    ( )( )    (o)( )    (x)( )    (x)(o)    (x)(x)    (x)(x)
+            coords[0] = new Vector2(0, 0);
+            coords[1] = new Vector2(-d, 0);
+            coords[2] = new Vector2(d, 0);
+            coords[3] = new Vector2(-r, -s);
+            coords[4] = new Vector2(r, s);
+            coords[5] = new Vector2(r, -s);
+            coords[6] = new Vector2(-r, s);
+
+            // Rotate the sampling pattern by 15 degrees.
+            const float cos15 = 0.96592582628906828675f;
+            const float sin15 = 0.25881904510252076235f;
+
+            for (int i = 0; i < 7; i++)
+            {
+                Vector2 coord = coords[i];
+
+                coords[i].x = coord.x * cos15 - coord.y * sin15;
+                coords[i].y = coord.x * sin15 + coord.y * cos15;
+            }
+        }
+        
+        // This is a sequence of 7 equidistant numbers from 1/14 to 13/14.
+        // Each of them is the centroid of the interval of length 2/14.
+        // They've been rearranged in a sequence of pairs {small, large}, s.t. (small + large) = 1.
+        // That way, the running average position is close to 0.5.
+        // | 6 | 2 | 4 | 1 | 5 | 3 | 7 |
+        // |   |   |   | o |   |   |   |
+        // |   | o |   | x |   |   |   |
+        // |   | x |   | x |   | o |   |
+        // |   | x | o | x |   | x |   |
+        // |   | x | x | x | o | x |   |
+        // | o | x | x | x | x | x |   |
+        // | x | x | x | x | x | x | o |
+        // | x | x | x | x | x | x | x |
+        static float[] m_zSeq = { 7.0f / 14.0f, 3.0f / 14.0f, 11.0f / 14.0f, 5.0f / 14.0f, 9.0f / 14.0f, 1.0f / 14.0f, 13.0f / 14.0f };
+        static Vector2[] m_xySeq = new Vector2[7];
+        
+        internal static void UpdateShaderVariableslVolumetrics(ref ShaderVariablesVolumetric cb, CameraData universalCamera, in Vector4 resolution, int m_VisibleLocalVolumetricFogVolumesCount, bool volumetricHistoryIsValid, VBufferParameters[] vBufferParams)
+        {
+            var fog = VolumeManager.instance.stack.GetComponent<Fog>();
+            var vFoV = universalCamera.camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
+            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            
+            cb._VBufferUnitDepthTexelSpacing = UniversalUtils.ComputZPlaneTexelSpacing(1.0f, vFoV, resolution.y);
+            cb._NumVisibleLocalVolumetricFog = (uint)m_VisibleLocalVolumetricFogVolumesCount;
+            cb._CornetteShanksConstant = CornetteShanksPhasePartConstant(fog.anisotropy.value);
+            cb._VBufferHistoryIsValid = volumetricHistoryIsValid ? 1u : 0u;
+
+            GetHexagonalClosePackedSpheres7(m_xySeq);
+            int sampleIndex = EnvironmentsRenderFeature.frameIndex % 7;
+            Vector4 xySeqOffset = new Vector4();
+            // TODO: should we somehow reorder offsets in Z based on the offset in XY? S.t. the samples more evenly cover the domain.
+            // Currently, we assume that they are completely uncorrelated, but maybe we should correlate them somehow.
+            xySeqOffset.Set(m_xySeq[sampleIndex].x, m_xySeq[sampleIndex].y, m_zSeq[sampleIndex], frameIndex);
+            cb._VBufferSampleOffset = xySeqOffset;
+            
+            var currIdx = (frameIndex + 0) & 1;
+            var prevIdx = (frameIndex + 1) & 1;
+
+            var currParams = vBufferParams[currIdx];
+            var prevParams = vBufferParams[prevIdx];
+
+            var pvp = prevParams.viewportSize;
+
+            // The lighting & density buffers are shared by all cameras.
+            // The history & feedback buffers are specific to the camera.
+            // These 2 types of buffers can have different sizes.
+            // Additionally, history buffers can have different sizes, since they are not resized at the same time.
+            Vector3Int historyBufferSize = Vector3Int.zero;
+
+            if (IsVolumetricReprojectionEnabled(universalCamera))
+            {
+                historyBufferSize = pvp;
+            }
+
+            cb._VBufferVoxelSize = currParams.voxelSize;
+            cb._VBufferPrevViewportSize = new Vector4(pvp.x, pvp.y, 1.0f / pvp.x, 1.0f / pvp.y);
+            cb._VBufferHistoryViewportScale = prevParams.ComputeViewportScale(historyBufferSize);
+            cb._VBufferHistoryViewportLimit = prevParams.ComputeViewportLimit(historyBufferSize);
+            cb._VBufferPrevDistanceEncodingParams = prevParams.depthEncodingParams;
+            cb._VBufferPrevDistanceDecodingParams = prevParams.depthDecodingParams;
+        }
+        
+        // https://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+        static float DistanceToOriginAABB(Vector3 point, Vector3 aabbSize)
+        {
+            float3 q = abs(point) - float3(aabbSize);
+            return length(max(q, 0.0f)) + min(max(q.x, max(q.y, q.z)), 0.0f);
+        }
+        
+        // Optimized version of https://www.sciencedirect.com/topics/computer-science/oriented-bounding-box
+        internal static float DistanceToOBB(OrientedBBox obb, Vector3 point)
+        {
+            float3 offset = point - obb.center;
+            float3 boxForward = normalize(cross(obb.right, obb.up));
+            float3 axisAlignedPoint = float3(dot(offset, normalize(obb.right)), dot(offset, normalize(obb.up)), dot(offset, boxForward));
+
+            return DistanceToOriginAABB(axisAlignedPoint, float3(obb.extentX, obb.extentY, obb.extentZ));
         }
     }
     #endregion
@@ -208,7 +324,7 @@ namespace UnityEngine.Rendering.Universal
                 UniversalUtils.ComputeViewportLimit(viewportSize.z, bufferSize.z));
         }
 
-        private float ComputeLastSliceDistance(uint sliceCount)
+        internal float ComputeLastSliceDistance(uint sliceCount)
         {
             float d = 1.0f - 0.5f / sliceCount;
             float ln2 = 0.69314718f;
@@ -388,6 +504,9 @@ namespace UnityEngine.Rendering.Universal
         public Vector4 _VBufferSampleOffset;
 
         public float _VBufferVoxelSize;
+        public float _HaveToPad;
+        public float _OtherwiseTheBuffer;
+        public float _IsFilledWithGarbage;
         public Vector4 _VBufferPrevViewportSize;
         public Vector4 _VBufferHistoryViewportScale;
         public Vector4 _VBufferHistoryViewportLimit;
