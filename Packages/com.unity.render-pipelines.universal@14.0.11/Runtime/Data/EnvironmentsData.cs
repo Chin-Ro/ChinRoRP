@@ -36,6 +36,8 @@ namespace UnityEngine.Rendering.Universal
         public ComputeShader generateMaxZCS;
         public ComputeShader volumeVoxelizationCS;
         public ComputeShader volumetricMaterialCS;
+        public ComputeShader volumetricLightingCS;
+        public ComputeShader volumetricLightingFilteringCS;
         public Shader opaqueAtmosphericScatteringShader;
         public Shader defaultFogVolumeShader;
     }

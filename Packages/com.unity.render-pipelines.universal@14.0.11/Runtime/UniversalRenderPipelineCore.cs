@@ -197,8 +197,65 @@ namespace UnityEngine.Rendering.Universal
     /// <summary>
     /// Struct that holds settings related to camera.
     /// </summary>
-    public struct CameraData
+    public class CameraData
     {
+        static Dictionary<Camera, CameraData> s_Cameras = new Dictionary<Camera, CameraData>(); 
+        static List<Camera> s_Cleanup = new List<Camera>();
+        public static CameraData GetOrCreate(Camera camera)
+        {
+            CameraData cameraData;
+            
+            if (!s_Cameras.TryGetValue(camera, out cameraData))
+            {
+                cameraData = new CameraData();
+                s_Cameras.Add(camera, cameraData);
+            }
+
+            return cameraData;
+        }
+
+        internal static void ClearAll()
+        {
+            foreach (var cam in s_Cameras)
+            {
+                cam.Value.Dispose();
+            }
+
+            s_Cameras.Clear();
+            s_Cleanup.Clear();
+        }
+        
+        // Look for any camera that hasn't been used in the last frame and remove them from the pool.
+        internal static void CleanUnused()
+        {
+            foreach (var key in s_Cameras.Keys)
+            {
+                var camera = s_Cameras[key];
+
+                // Unfortunately, the scene view camera is always isActiveAndEnabled==false so we can't rely on this. For this reason we never release it (which should be fine in the editor)
+                if (camera.camera != null && camera.camera.cameraType == CameraType.SceneView)
+                    continue;
+
+                bool hasPersistentHistory = camera.camera != null && camera.hasPersistentHistory;
+                // We keep preview camera around as they are generally disabled/enabled every frame. They will be destroyed later when camera.camera is null
+                if (camera.camera == null || (!camera.camera.isActiveAndEnabled && camera.camera.cameraType != CameraType.Preview && !hasPersistentHistory))
+                    s_Cleanup.Add(key);
+            }
+
+            foreach (var cam in s_Cleanup)
+            {
+                s_Cameras[cam].Dispose();
+                s_Cameras.Remove(cam);
+            }
+
+            s_Cleanup.Clear();
+        }
+
+        void Dispose()
+        {
+            
+        }
+        
         // Internal camera data as we are not yet sure how to expose View in stereo context.
         // We might change this API soon.
         Matrix4x4 m_ViewMatrix;
@@ -742,6 +799,8 @@ namespace UnityEngine.Rendering.Universal
         {
             get => taaSettings.resetHistoryFrames != 0;
         }
+
+        internal bool hasPersistentHistory = false;
 
 
         /// <summary>

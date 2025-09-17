@@ -100,6 +100,23 @@ namespace UnityEngine.Rendering.Universal
             float tanHalfVertFoV = Mathf.Tan(0.5f * verticalFoV);
             return tanHalfVertFoV * (2.0f / resolutionY) * planeDepth;
         }
+        
+        public static bool IsProjectionMatrixOblique(Matrix4x4 projectionMatrix)
+        {
+            return projectionMatrix[2] != 0 || projectionMatrix[6] != 0;
+        }
+        
+        public static Matrix4x4 CalculateProjectionMatrix(Camera camera)
+        {
+            if (camera.orthographic)
+            {
+                var h = camera.orthographicSize;
+                var w = camera.orthographicSize * camera.aspect;
+                return Matrix4x4.Ortho(-w, w, -h, h, camera.nearClipPlane, camera.farClipPlane);
+            }
+            else
+                return Matrix4x4.Perspective(camera.GetGateFittedFieldOfView(), camera.aspect, camera.nearClipPlane, camera.farClipPlane);
+        }
     }
     
     struct ZonalHarmonicsL2

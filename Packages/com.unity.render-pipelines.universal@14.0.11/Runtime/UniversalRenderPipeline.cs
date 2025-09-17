@@ -178,6 +178,9 @@ namespace UnityEngine.Rendering.Universal
         // This field provides the correct reference for the purpose of cleaning up the renderers on this pipeline
         // asset.
         private readonly UniversalRenderPipelineAsset pipelineAsset;
+        
+        // Use to detect frame changes (for accurate frame count in editor, consider using hdCamera.GetCameraFrameCount)
+        int m_FrameCount;
 
         /// <inheritdoc/>
         public override string ToString() => pipelineAsset?.ToString();
@@ -269,8 +272,9 @@ namespace UnityEngine.Rendering.Universal
 #endif
             Lightmapping.ResetDelegate();
             CameraCaptureBridge.enabled = false;
-
+            
             DisposeAdditionalCameraData();
+            CameraData.ClearAll();
         }
 
         // If the URP gets destroyed, we must clean up all the added URP specific camera data and
@@ -358,6 +362,25 @@ namespace UnityEngine.Rendering.Universal
             // during initialization, but unfortunately it's possible for external code to overwrite the setting due to RTHandle state being global.
             // The best we can do to avoid errors in this situation is to ensure the state is set to the correct value every time we perform rendering.
             RTHandles.SetHardwareDynamicResolutionState(true);
+            
+#if UNITY_EDITOR
+            int newCount = m_FrameCount;
+            foreach (var c in cameras)
+            {
+                if (c.cameraType != CameraType.Preview)
+                {
+                    newCount++;
+                    break;
+                }
+            }
+#else
+            int newCount = Time.frameCount;
+#endif
+            if (newCount != m_FrameCount)
+            {
+                m_FrameCount = newCount;
+                CameraData.CleanUnused();
+            }
 
             SortCameras(cameras);
 #if UNITY_2021_1_OR_NEWER
@@ -1081,7 +1104,7 @@ namespace UnityEngine.Rendering.Universal
         {
             using var profScope = new ProfilingScope(null, Profiling.Pipeline.initializeCameraData);
 
-            cameraData = new CameraData();
+            cameraData = CameraData.GetOrCreate(camera);
             InitializeStackedCameraData(camera, additionalCameraData, ref cameraData);
 
             cameraData.camera = camera;
@@ -1926,6 +1949,7 @@ namespace UnityEngine.Rendering.Universal
                     break;
                 
                 case TonemappingMode.GranTurismo:
+					hueShift = tonemapping.hueShiftAmount.value;
                     break;
                 
                 case TonemappingMode.Filmic:

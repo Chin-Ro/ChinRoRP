@@ -14,8 +14,6 @@ namespace UnityEngine.Rendering.Universal
     #region VolumetricLightingUtils
     public class VolumetricLightingUtils
     {
-        // This size is shared between all cameras to create the volumetric 3D textures
-        internal static Vector3Int s_CurrentVolumetricBufferSize;
         
         private static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
         {
@@ -81,7 +79,7 @@ namespace UnityEngine.Rendering.Universal
         
         // This function relies on being called once per camera per frame.
         // The results are undefined otherwise.
-        internal static void UpdateVolumetricBufferParams(CameraData universalCamera, ref VBufferParameters[] vBufferParams)
+        internal static void UpdateVolumetricBufferParams(CameraData universalCamera, ref VBufferParameters[] vBufferParams, ref Vector3Int s_CurrentVolumetricBufferSize)
         {
             if (!Fog.IsVolumetricFogEnabled(universalCamera))
                 return;
@@ -210,13 +208,14 @@ namespace UnityEngine.Rendering.Universal
         // | x | x | x | x | x | x | x |
         static float[] m_zSeq = { 7.0f / 14.0f, 3.0f / 14.0f, 11.0f / 14.0f, 5.0f / 14.0f, 9.0f / 14.0f, 1.0f / 14.0f, 13.0f / 14.0f };
         static Vector2[] m_xySeq = new Vector2[7];
-        
-        internal static void UpdateShaderVariableslVolumetrics(ref ShaderVariablesVolumetric cb, CameraData universalCamera, in Vector4 resolution, int m_VisibleLocalVolumetricFogVolumesCount, bool volumetricHistoryIsValid, VBufferParameters[] vBufferParams)
+
+        internal static void UpdateShaderVariableslVolumetrics(ref ShaderVariablesVolumetric cb, CameraData universalCamera, in Vector4 resolution,
+            int m_VisibleLocalVolumetricFogVolumesCount, bool volumetricHistoryIsValid, VBufferParameters[] vBufferParams)
         {
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             var vFoV = universalCamera.camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
             int frameIndex = EnvironmentsRenderFeature.frameIndex;
-            
+
             cb._VBufferUnitDepthTexelSpacing = UniversalUtils.ComputZPlaneTexelSpacing(1.0f, vFoV, resolution.y);
             cb._NumVisibleLocalVolumetricFog = (uint)m_VisibleLocalVolumetricFogVolumesCount;
             cb._CornetteShanksConstant = CornetteShanksPhasePartConstant(fog.anisotropy.value);
@@ -229,7 +228,7 @@ namespace UnityEngine.Rendering.Universal
             // Currently, we assume that they are completely uncorrelated, but maybe we should correlate them somehow.
             xySeqOffset.Set(m_xySeq[sampleIndex].x, m_xySeq[sampleIndex].y, m_zSeq[sampleIndex], frameIndex);
             cb._VBufferSampleOffset = xySeqOffset;
-            
+
             var currIdx = (frameIndex + 0) & 1;
             var prevIdx = (frameIndex + 1) & 1;
 
@@ -256,7 +255,7 @@ namespace UnityEngine.Rendering.Universal
             cb._VBufferPrevDistanceEncodingParams = prevParams.depthEncodingParams;
             cb._VBufferPrevDistanceDecodingParams = prevParams.depthDecodingParams;
         }
-        
+
         // https://iquilezles.org/www/articles/distfunctions/distfunctions.htm
         static float DistanceToOriginAABB(Vector3 point, Vector3 aabbSize)
         {
@@ -521,5 +520,107 @@ namespace UnityEngine.Rendering.Universal
         public uint sliceCount;
         public uint padding0;
         public uint padding1;
+    }
+    
+    internal static class FogVolumeAPI
+    {
+        internal static readonly string k_BlendModeProperty = "_FogVolumeBlendMode";
+        internal static readonly string k_SrcColorBlendProperty = "_FogVolumeSrcColorBlend";
+        internal static readonly string k_DstColorBlendProperty = "_FogVolumeDstColorBlend";
+        internal static readonly string k_SrcAlphaBlendProperty = "_FogVolumeSrcAlphaBlend";
+        internal static readonly string k_DstAlphaBlendProperty = "_FogVolumeDstAlphaBlend";
+        internal static readonly string k_ColorBlendOpProperty = "_FogVolumeColorBlendOp";
+        internal static readonly string k_AlphaBlendOpProperty = "_FogVolumeAlphaBlendOp";
+
+        internal static void ComputeBlendParameters(LocalVolumetricFogBlendingMode mode, out BlendMode srcColorBlend,
+            out BlendMode srcAlphaBlend, out BlendMode dstColorBlend, out BlendMode dstAlphaBlend,
+            out BlendOp colorBlendOp, out BlendOp alphaBlendOp)
+        {
+            colorBlendOp = BlendOp.Add;
+            alphaBlendOp = BlendOp.Add;
+
+            switch (mode)
+            {
+                default:
+                case LocalVolumetricFogBlendingMode.Additive:
+                    srcColorBlend = BlendMode.One;
+                    dstColorBlend = BlendMode.One;
+                    srcAlphaBlend = BlendMode.One;
+                    dstAlphaBlend = BlendMode.One;
+                    break;
+                case LocalVolumetricFogBlendingMode.Multiply:
+                    srcColorBlend = BlendMode.DstColor;
+                    dstColorBlend = BlendMode.Zero;
+                    srcAlphaBlend = BlendMode.DstAlpha;
+                    dstAlphaBlend = BlendMode.Zero;
+                    break;
+                case LocalVolumetricFogBlendingMode.Overwrite:
+                    srcColorBlend = BlendMode.One;
+                    dstColorBlend = BlendMode.Zero;
+                    srcAlphaBlend = BlendMode.One;
+                    dstAlphaBlend = BlendMode.Zero;
+                    break;
+                case LocalVolumetricFogBlendingMode.Max:
+                    srcColorBlend = BlendMode.One;
+                    dstColorBlend = BlendMode.One;
+                    srcAlphaBlend = BlendMode.One;
+                    dstAlphaBlend = BlendMode.One;
+                    alphaBlendOp = BlendOp.Max;
+                    colorBlendOp = BlendOp.Max;
+                    break;
+                case LocalVolumetricFogBlendingMode.Min:
+                    srcColorBlend = BlendMode.One;
+                    dstColorBlend = BlendMode.One;
+                    srcAlphaBlend = BlendMode.One;
+                    dstAlphaBlend = BlendMode.One;
+                    alphaBlendOp = BlendOp.Min;
+                    colorBlendOp = BlendOp.Min;
+                    break;
+            }
+        }
+
+        internal static void SetupFogVolumeKeywordsAndProperties(Material material)
+        {
+            if (material.HasProperty(k_BlendModeProperty))
+            {
+                LocalVolumetricFogBlendingMode mode = (LocalVolumetricFogBlendingMode)material.GetFloat(k_BlendModeProperty);
+                SetupFogVolumeBlendMode(material, mode);
+            }
+        }
+
+        internal static int GetPassIndexFromBlendingMode(LocalVolumetricFogBlendingMode mode) => (int)mode;
+
+        internal static void SetupFogVolumeBlendMode(Material material, LocalVolumetricFogBlendingMode mode)
+        {
+            ComputeBlendParameters(mode, out var srcColorBlend, out var srcAlphaBlend, out var dstColorBlend, out var dstAlphaBlend, out var colorBlendOp, out var alphaBlendOp);
+
+            material.SetFloat(k_SrcColorBlendProperty, (float)srcColorBlend);
+            material.SetFloat(k_DstColorBlendProperty, (float)dstColorBlend);
+            material.SetFloat(k_SrcAlphaBlendProperty, (float)srcAlphaBlend);
+            material.SetFloat(k_DstAlphaBlendProperty, (float)dstAlphaBlend);
+            material.SetFloat(k_ColorBlendOpProperty, (float)colorBlendOp);
+            material.SetFloat(k_AlphaBlendOpProperty, (float)alphaBlendOp);
+        }
+    }
+    
+    struct VolumetricMaterialDataCBuffer
+    {
+        public Vector4 _VolumetricMaterialObbRight;
+        public Vector4 _VolumetricMaterialObbUp;
+        public Vector4 _VolumetricMaterialObbExtents;
+        public Vector4 _VolumetricMaterialObbCenter;
+        public Vector4 _VolumetricMaterialAlbedo;
+        public Vector4 _VolumetricMaterialRcpPosFaceFade;
+        public Vector4 _VolumetricMaterialRcpNegFaceFade;
+
+        public float _VolumetricMaterialInvertFade;
+        public float _VolumetricMaterialExtinction;
+        public float _VolumetricMaterialRcpDistFadeLen;
+        public float _VolumetricMaterialEndTimesRcpDistFadeLen;
+
+        public float _VolumetricMaterialFalloffMode;
+        public float padding0;
+        public float padding1;
+        public float padding2;
     }
 }
