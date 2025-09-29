@@ -49,7 +49,7 @@
             //     // Warning: we do not modify depth values. Use them with care!
             // }
 
-            EvaluateAtmosphericScattering(posInput, V, color, opacity); // Premultiplied alpha
+            EvaluateAtmosphericScattering(posInput, V, input.uv, color, opacity); // Premultiplied alpha
         }
         
         float4 Frag(Varyings input) : SV_Target

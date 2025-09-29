@@ -40,5 +40,6 @@ namespace UnityEngine.Rendering.Universal
         public ComputeShader volumetricLightingFilteringCS;
         public Shader opaqueAtmosphericScatteringShader;
         public Shader defaultFogVolumeShader;
+        public Shader lightShaftsShader;
     }
 }

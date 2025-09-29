@@ -24,6 +24,11 @@ namespace UnityEditor.Rendering.Universal
         public SerializedProperty lightCookieSizeProp { get; }                       // Multi dimensional light cookie size replacing `cookieSize` in legacy light.
         public SerializedProperty lightCookieOffsetProp { get; }                     // Multi dimensional light cookie offset.
 
+        // Volumetric
+        public SerializedProperty useVolumetricProp { get; }
+        public SerializedProperty volumetricDimmerProp { get; }
+        public SerializedProperty volumetricShadowDimmerProp { get; }
+
         // Light layers related
         public SerializedProperty renderingLayers { get; }
         public SerializedProperty customShadowLayers { get; }
@@ -70,6 +75,10 @@ namespace UnityEditor.Rendering.Universal
             renderingLayers = serializedAdditionalDataObject.FindProperty("m_RenderingLayers");
             customShadowLayers = serializedAdditionalDataObject.FindProperty("m_CustomShadowLayers");
             shadowRenderingLayers = serializedAdditionalDataObject.FindProperty("m_ShadowRenderingLayers");
+            
+            useVolumetricProp = serializedAdditionalDataObject.FindProperty("useVolumetric");
+            volumetricDimmerProp = serializedAdditionalDataObject.FindProperty("m_VolumetricDimmer");
+            volumetricShadowDimmerProp = serializedAdditionalDataObject.FindProperty("m_VolumetricShadowDimmer");
 
             settings.ApplyModifiedProperties();
         }

@@ -37,6 +37,11 @@ namespace UnityEngine.Rendering.Universal
             public Vector4 occlusionProbeChannels;
 
             /// <summary>
+            /// The channel for volumetric.
+            /// </summary>
+            public Vector4 volumetric;
+
+            /// <summary>
             /// The layer mask used.
             /// </summary>
             public uint layerMask;

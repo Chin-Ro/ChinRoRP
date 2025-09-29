@@ -102,13 +102,15 @@ float4 _MainLightPosition;
 // In Forward+, .a stores whether the main light is using subtractive mixed mode.
 half4 _MainLightColor;
 half4 _MainLightOcclusionProbes;
+half4 _MainLightVolumetric; // x: useVolumetric, y: volumetric dimmer, z: volumetric shadow dimmer, w: volumetric distance
 uint _MainLightLayerMask;
 
 // x: SSAO Enabled/Disabled (Needed for situations when OFF keyword is stripped out but feature disabled in runtime)
 // yz are currently unused
 // w: directLightStrength
 half4 _AmbientOcclusionParam;
-
+// x: Max per object additional light count.
+// y: visible Light count;
 half4 _AdditionalLightsCount;
 
 uint _RenderingLayerMaxInt;
@@ -154,6 +156,7 @@ half4 _AdditionalLightsColor[MAX_VISIBLE_LIGHTS];
 half4 _AdditionalLightsAttenuation[MAX_VISIBLE_LIGHTS];
 half4 _AdditionalLightsSpotDir[MAX_VISIBLE_LIGHTS];
 half4 _AdditionalLightsOcclusionProbes[MAX_VISIBLE_LIGHTS];
+half4 _AdditionalLightsVolumetric[MAX_VISIBLE_LIGHTS];
 float _AdditionalLightsLayerMasks[MAX_VISIBLE_LIGHTS]; // we want uint[] but Unity api does not support it.
 #ifndef SHADER_API_GLES3
 CBUFFER_END

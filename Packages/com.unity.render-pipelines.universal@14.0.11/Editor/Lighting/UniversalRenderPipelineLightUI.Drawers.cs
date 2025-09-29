@@ -22,8 +22,9 @@ namespace UnityEditor.Rendering.Universal
             Shape = 1 << 1,
             Emission = 1 << 2,
             Rendering = 1 << 3,
-            Shadows = 1 << 4,
-            LightCookie = 1 << 5
+            Volumetric = 1 << 4,
+            Shadows = 1 << 5,
+            LightCookie = 1 << 6
         }
 
         static readonly ExpandedState<Expandable, Light> k_ExpandedState = new(~-1, "URP");
@@ -69,6 +70,10 @@ namespace UnityEditor.Rendering.Universal
                 Expandable.Rendering,
                 k_ExpandedState,
                 DrawRenderingContent),
+            CED.FoldoutGroup(LightUI.Styles.volumetricHeader, 
+                Expandable.Volumetric, 
+                k_ExpandedState, 
+                DrawVolumetricContent),
             CED.FoldoutGroup(LightUI.Styles.shadowHeader,
                 Expandable.Shadows,
                 k_ExpandedState,
@@ -263,6 +268,17 @@ namespace UnityEditor.Rendering.Universal
             if (serializedLight.settings.cullingMask.intValue != -1)
             {
                 EditorGUILayout.HelpBox(Styles.CullingMaskWarning.text, MessageType.Info);
+            }
+        }
+
+        static void DrawVolumetricContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)
+        {
+            EditorGUILayout.PropertyField(serializedLight.useVolumetricProp, Styles.VolumetricEnable);
+            using (new EditorGUI.DisabledScope(!serializedLight.useVolumetricProp.boolValue))
+            using (new EditorGUI.IndentLevelScope())
+            {
+                EditorGUILayout.PropertyField(serializedLight.volumetricDimmerProp, Styles.VolumetricDimmer);
+                EditorGUILayout.Slider(serializedLight.volumetricShadowDimmerProp, 0.0f, 1.0f, Styles.VolumetricShadowDimmer);
             }
         }
 

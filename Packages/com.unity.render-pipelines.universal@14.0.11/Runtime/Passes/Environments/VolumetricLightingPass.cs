@@ -23,7 +23,6 @@ namespace UnityEngine.Rendering.Universal
 
             public RTHandle densityBuffer;
             public RTHandle lightingBuffer;
-            public RTHandle filteringOutputBuffer;
             public RTHandle maxZBuffer;
             public RTHandle historyBuffer;
             public RTHandle feedbackBuffer;
@@ -31,8 +30,6 @@ namespace UnityEngine.Rendering.Universal
 
         private VolumetricLightingPassData passData;
         private VBufferParameters[] vBufferParams;
-
-        private RTHandle[] volumetricHistoryBuffers;
         
         public VolumetricLightingPass(EnvironmentsData data)
         {
@@ -68,18 +65,13 @@ namespace UnityEngine.Rendering.Universal
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             
             // Only available in the Play Mode because all the frame counters in the Edit Mode are broken.
-            bool volumeAllowsReprojection = ((int)fog.denoisingMode.value & (int)Fog.FogDenoisingMode.Reprojection) != 0;
-            passData.enableReprojection = volumeAllowsReprojection;
+            passData.enableReprojection = Fog.IsVolumetricReprojectionEnabled(renderingData.cameraData);
             bool enableAnisotropy = fog.anisotropy.value != 0;
-            // The multi-pass integration is only possible if re-projection is possible and the effect is not in anisotropic mode.
-            bool optimal = currParams.voxelSize == 8;
             passData.volumetricLightingCS.shaderKeywords = null;
             passData.volumetricLightingFilteringCS.shaderKeywords = null;
             
-            CoreUtils.SetKeyword(passData.volumetricLightingCS, "LIGHTLOOP_DISABLE_TILE_AND_CLUSTER", true);
             CoreUtils.SetKeyword(passData.volumetricLightingCS, "ENABLE_REPROJECTION", passData.enableReprojection);
             CoreUtils.SetKeyword(passData.volumetricLightingCS, "ENABLE_ANISOTROPY", enableAnisotropy);
-            CoreUtils.SetKeyword(passData.volumetricLightingCS, "VL_PRESET_OPTIMAL", optimal);
             CoreUtils.SetKeyword(passData.volumetricLightingCS, "SUPPORT_LOCAL_LIGHTS", !fog.directionalLightsOnly.value);
             
             passData.volumetricLightingKernel = passData.volumetricLightingCS.FindKernel("VolumetricLighting");
@@ -90,15 +82,57 @@ namespace UnityEngine.Rendering.Universal
             
             passData.resolution = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
             passData.viewCount = 1;
-            passData.filterVolume = ((int)fog.denoisingMode.value & (int)Fog.FogDenoisingMode.Gaussian) != 0;
+            passData.filterVolume = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0;
             passData.sliceCount = (int)(cvp.z);
+
+            if (passData.enableReprojection)
+            {
+                passData.feedbackBuffer = renderingData.cameraData.volumetricHistoryBuffers[currIdx];
+                passData.historyBuffer = renderingData.cameraData.volumetricHistoryBuffers[prevIdx];
+            }
             
-            
+            var cmd = renderingData.commandBuffer;
+            using (new ProfilingScope(cmd, new ProfilingSampler("Volumetric Lighting")))
+            {
+                var data = passData;
+                cmd.SetComputeTextureParam(data.volumetricLightingCS, data.volumetricLightingKernel, EnvironmentConstants._MaxZMaskTexture, data.maxZBuffer);  // Read
+                cmd.SetComputeTextureParam(data.volumetricLightingCS, data.volumetricLightingKernel, EnvironmentConstants._VBufferDensity, data.densityBuffer);  // Read
+                cmd.SetComputeTextureParam(data.volumetricLightingCS, data.volumetricLightingKernel, EnvironmentConstants._VBufferLighting, data.lightingBuffer); // Write
+
+                if (data.enableReprojection)
+                {
+                    cmd.SetComputeTextureParam(data.volumetricLightingCS, data.volumetricLightingKernel, EnvironmentConstants._VBufferHistory, data.historyBuffer);  // Read
+                    cmd.SetComputeTextureParam(data.volumetricLightingCS, data.volumetricLightingKernel, EnvironmentConstants._VBufferFeedback, data.feedbackBuffer); // Write
+                }
+                ConstantBuffer.Push(cmd, data.volumetricCB, data.volumetricLightingCS, EnvironmentConstants._ShaderVariablesVolumetric);
+                
+                // The shader defines GROUP_SIZE_1D = 8.
+                cmd.DispatchCompute(data.volumetricLightingCS, data.volumetricLightingKernel, ((int)data.resolution.x + 7) / 8, ((int)data.resolution.y + 7) / 8, data.viewCount);
+
+                if (data.filterVolume)
+                {
+                    ConstantBuffer.Push(cmd, data.volumetricCB, data.volumetricLightingFilteringCS, EnvironmentConstants._ShaderVariablesVolumetric);
+                    
+                    // The shader defines GROUP_SIZE_1D_XY = 8 and GROUP_SIZE_1D_Z = 1
+                    cmd.SetComputeTextureParam(data.volumetricLightingFilteringCS, data.volumetricFilteringKernel, EnvironmentConstants._VBufferLighting, data.lightingBuffer);
+
+                    cmd.DispatchCompute(data.volumetricLightingFilteringCS, data.volumetricFilteringKernel, UniversalUtils.DivRoundUp((int)data.resolution.x, 8),
+                        UniversalUtils.DivRoundUp((int)data.resolution.y, 8),
+                        data.sliceCount);
+                }
+                
+                cmd.SetGlobalTexture(EnvironmentConstants._VBufferLighting, data.lightingBuffer);
+            }
+
+            if (passData.enableReprojection && renderingData.cameraData.volumetricValidFrames > 1)
+                renderingData.cameraData.volumetricHistoryIsValid = true; // For the next frame..
+            else
+                renderingData.cameraData.volumetricValidFrames++;
         }
         
         public void Dispose()
         {
-            
+            passData = null;
         }
     }
 }

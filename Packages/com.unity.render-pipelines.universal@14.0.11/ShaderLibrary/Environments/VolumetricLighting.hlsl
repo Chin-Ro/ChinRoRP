@@ -19,6 +19,7 @@
 #define LOCALVOLUMETRICFOGFALLOFFMODE_EXPONENTIAL (1)
 
 CBUFFER_START(ShaderVariablesVolumetric)
+float4x4 _VBufferCoordToViewDirWS;
 float _VBufferUnitDepthTexelSpacing;
 uint _NumVisibleLocalVolumetricFog;
 float _CornetteShanksConstant;

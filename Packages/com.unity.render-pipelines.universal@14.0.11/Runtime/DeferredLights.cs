@@ -615,8 +615,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             if (lightData.mainLightIndex < 0)
                 return;
 
-            Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
-            UniversalRenderPipeline.InitializeLightConstants_Common(lightData.visibleLights, lightData.mainLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+            Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel, lightVolumetric;
+            UniversalRenderPipeline.InitializeLightConstants_Common(lightData.visibleLights, lightData.mainLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel, out lightVolumetric);
 
             var additionalLightData = lightData.visibleLights[lightData.mainLightIndex].light.GetUniversalAdditionalLightData();
             uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
@@ -792,8 +792,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 // Avoid light find on every access.
                 Light light = vl.light;
 
-                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
-                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel, lightVolumetric;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel, out lightVolumetric);
 
                 int lightFlags = 0;
                 if (light.bakingOutput.lightmapBakeType == LightmapBakeType.Mixed)
@@ -864,8 +864,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                     new Vector4(posWS.x, posWS.y, posWS.z, 1.0f)
                 );
 
-                Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
-                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+                Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel, lightVolumetric;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel, out lightVolumetric);
 
                 var additionalLightData = light.GetUniversalAdditionalLightData();
                 uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
@@ -931,8 +931,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 // The tighter the spot shape, the lesser inflation is needed.
                 float guard = Mathf.Lerp(1.0f, kStencilShapeGuard, sinAlpha);
 
-                Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
-                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+                Vector4 lightPos, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel, lightVolumetric;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightPos, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel, out lightVolumetric);
 
                 var additionalLightData = light.GetUniversalAdditionalLightData();
                 uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);

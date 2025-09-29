@@ -265,7 +265,44 @@ namespace UnityEngine.Rendering.Universal
             set => m_SoftShadowQuality = value;
         }
         [SerializeField] private SoftShadowQuality m_SoftShadowQuality = SoftShadowQuality.UsePipelineSettings;
+        
+        [SerializeField] public bool useVolumetric = true;
+        
+        [Range(0.0f, 16.0f), SerializeField]
+        float m_VolumetricDimmer = 1.0f;
+        /// <summary>
+        /// Get/Set the light dimmer / multiplier on volumetric effects, between 0 and 16.
+        /// </summary>
+        public float volumetricDimmer
+        {
+            get => useVolumetric ? m_VolumetricDimmer : 0.0f;
+            set
+            {
+                if (Mathf.Approximately(m_VolumetricDimmer, value))
+                    return;
 
+                m_VolumetricDimmer = Mathf.Clamp(value, 0.0f, 16.0f);
+            }
+        }
+        
+        [Range(0.0f, 1.0f)]
+        [SerializeField]
+        float m_VolumetricShadowDimmer = 1.0f;
+        /// <summary>
+        /// Get/Set the volumetric shadow dimmer value, between 0 and 1.
+        /// </summary>
+        public float volumetricShadowDimmer
+        {
+            get => useVolumetric ? m_VolumetricShadowDimmer : 0.0f;
+            set
+            {
+                if (Mathf.Approximately(m_VolumetricShadowDimmer, value))
+                    return;
+
+                m_VolumetricShadowDimmer = Mathf.Clamp01(value);
+            }
+        }
+        
         /// <inheritdoc/>
         public void OnBeforeSerialize()
         {

@@ -1339,7 +1339,20 @@ namespace UnityEngine.Rendering.Universal
             // Depends on the cameraTargetDesc, size and MSAA also XR modifications of those.
             Matrix4x4 jitterMat = TemporalAA.CalculateJitterMatrix(ref cameraData);
             cameraData.SetViewProjectionAndJitterMatrix(camera.worldToCameraMatrix, projectionMatrix, jitterMat);
+            
+            var gpuVP = GL.GetGPUProjectionMatrix(cameraData.GetProjectionMatrixNoJitter(0), true) * cameraData.GetViewMatrix(0);
+            if (cameraData.isFirstFrame)
+            {
+                cameraData.prevWorldSpaceCameraPos = camera.transform.position;
+                cameraData.prevViewProjectionMatrix = gpuVP;
+            }
+            else
+            {
+                cameraData.prevWorldSpaceCameraPos = cameraData.worldSpaceCameraPos;
+                cameraData.prevViewProjectionMatrix = cameraData.nonJitteredViewProjMatrix;
+            }
 
+            cameraData.nonJitteredViewProjMatrix = gpuVP;
             cameraData.worldSpaceCameraPos = camera.transform.position;
 
             var backgroundColorSRGB = camera.backgroundColor;

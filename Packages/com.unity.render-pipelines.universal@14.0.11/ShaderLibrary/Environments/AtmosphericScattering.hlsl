@@ -5,6 +5,7 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/UnrealEngineHeightFog.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/VolumeRendering.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/VBuffer.hlsl"
 
 #define ENVCONSTANTS_CONVOLUTION_MIP_COUNT (7)
 
@@ -12,6 +13,10 @@
 #define _MipFogFar                      _MipFogParameters.y
 #define _MipFogMaxMip                   _MipFogParameters.z
 #define _EnableAtmosphereFog            _MipFogParameters.w
+
+TEXTURE3D(_VBufferLighting);
+SAMPLER(s_linear_clamp_sampler);
+TEXTURE2D(_LightShaftTexture);
 
 half3 SampleSkyCubemap(float3 reflectVector, float mip)
 {
@@ -27,7 +32,7 @@ float3 GetSkyColor(float3 V, float fragDist)
     return SampleSkyCubemap(V, mipLevel); // '_FogColor' is the tint
 }
 
-void EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, out float3 color, out float3 opacity)
+void EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, float2 screenUV, out float3 color, out float3 opacity)
 {
     color = opacity = float3(0, 0, 0);
 
@@ -54,11 +59,25 @@ void EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, out float3
 
         if (_EnableVolumetricFog != 0)
         {
-            
+            bool doBiquadraticReconstruction = _VolumetricFilteringEnabled == 0; // Only if filtering is disabled.
+            float4 value = SampleVBuffer(TEXTURE3D_ARGS(_VBufferLighting, s_linear_clamp_sampler),
+                                         posInput.positionNDC,
+                                         fogFragDist,
+                                         _VBufferViewportSize,
+                                         _VBufferLightingViewportScale.xyz,
+                                         _VBufferLightingViewportLimit.xyz,
+                                         _VBufferDistanceEncodingParams,
+                                         _VBufferDistanceDecodingParams,
+                                         true, doBiquadraticReconstruction, false);
+
+            // TODO: add some slowly animated noise (dither?) to the reconstructed value.
+            // TODO: re-enable tone mapping after implementing pre-exposure.
+            volFog = DelinearizeRGBA(float4(/*FastTonemapInvert*/(value.rgb), value.a));
+            expFogStart = _VBufferLastSliceDist;
         }
         
         // Height Fog
-        float4 HeightFogInscatteringAndOpacity = GetExponentialHeightFogUE(posInput.positionWS - GetCurrentViewPosition(), V);
+        float4 HeightFogInscatteringAndOpacity = GetExponentialHeightFogUE(posInput.positionWS - GetCurrentViewPosition());
 
         volFog.rgb += (1 - volFog.a) * HeightFogInscatteringAndOpacity.rgb;
         volFog.a = 1 - (1 - volFog.a) * HeightFogInscatteringAndOpacity.a;
@@ -94,9 +113,32 @@ void EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, out float3
 
         if (_EnableLightShafts > 0)
         {
-            
+            float lightShaftMask = SAMPLE_TEXTURE2D(_LightShaftTexture, s_linear_clamp_sampler, screenUV).x;
+            color *= lightShaftMask;
         }
     }
+}
+
+// Used for transparent object. input color is color + alpha of the original transparent pixel.
+// This must be call after ApplyBlendMode to work correctly
+// Caution: Must stay in sync with VFXApplyFog in VFXCommon.hlsl
+float4 EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, float2 scrrenUV, float4 inputColor)
+{
+    float4 result = inputColor;
     
+    float3 volColor, volOpacity;
+    EvaluateAtmosphericScattering(posInput, V, scrrenUV, volColor, volOpacity); // Premultiplied alpha
+
+#if defined(_ALPHAPREMULTIPLY_ON)
+    result.rgb = result.rgb * (1 - volOpacity) + volColor * result.a;
+#elif defined(_ALPHAADDITIVE_ON)
+    result.rgb = result.rgb * (1.0 - volOpacity);
+#elif defined(_ALPHAMODULATE_ON)
+    result.rgb = result.rgb * (1.0 - volOpacity) + volOpacity;
+#else
+    result.rgb = result.rgb * (1 - volOpacity) + volColor * result.a;
+#endif
+
+    return result;
 }
 #endif

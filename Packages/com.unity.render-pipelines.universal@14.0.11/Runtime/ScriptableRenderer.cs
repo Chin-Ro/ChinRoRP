@@ -181,7 +181,7 @@ namespace UnityEngine.Rendering.Universal
                 Vector4 resolution = new Vector4(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height,
                     1.0f / cameraData.cameraTargetDescriptor.width, 1.0f / cameraData.cameraTargetDescriptor.height);
                 float gpuProjAspect = UniversalUtils.ProjectionMatrixAspect(projectionMatrix);
-                Matrix4x4 pixelCoordToViewDirMatrix = ComputePixelCoordToWorldSpaceViewDirectionMatrix(cameraData.camera, projectionMatrix, worldToCameraMatrix, resolution, gpuProjAspect);
+                Matrix4x4 pixelCoordToViewDirMatrix = UniversalUtils.ComputePixelCoordToWorldSpaceViewDirectionMatrix(cameraData.camera, projectionMatrix, worldToCameraMatrix, resolution, gpuProjAspect);
                 cmd.SetGlobalMatrix(ShaderPropertyId.pixelCoordToViewMatrix, pixelCoordToViewDirMatrix);
 
                 cmd.SetGlobalMatrix(ShaderPropertyId.inverseViewMatrix, inverseViewMatrix);
@@ -190,19 +190,6 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // TODO: Add SetPerCameraClippingPlaneProperties here once we are sure it correctly behaves in overlay camera for some time
-        }
-
-        private static Matrix4x4 ComputePixelCoordToWorldSpaceViewDirectionMatrix(Camera camera, Matrix4x4 projectionMatrix, Matrix4x4 viewMatrix, Vector4 resolution, float aspect)
-        {
-            float verticalFoV = camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
-            if (!camera.usePhysicalProperties)
-            {
-                verticalFoV = Mathf.Atan(-1.0f / GL.GetGPUProjectionMatrix(projectionMatrix, false)[1, 1]) * 2;
-            }
-                
-            Vector2 lensShift = camera.GetGateFittedLensShift();
-            
-            return UniversalUtils.ComputePixelCoordToWorldSpaceViewDirectionMatrix(verticalFoV, lensShift, resolution, viewMatrix, false, aspect, camera.orthographic);
         }
 
         /// <summary>
@@ -278,6 +265,9 @@ namespace UnityEngine.Rendering.Universal
 
             // Camera and Screen variables as described in https://docs.unity3d.com/Manual/SL-UnityShaderVariables.html
             cmd.SetGlobalVector(ShaderPropertyId.worldSpaceCameraPos, cameraData.worldSpaceCameraPos);
+            cmd.SetGlobalVector(ShaderPropertyId.prevWorldSpaceCameraPos, cameraData.prevWorldSpaceCameraPos);
+            cmd.SetGlobalMatrix(ShaderPropertyId.prevViewProjMatrix, cameraData.prevViewProjectionMatrix);
+            cmd.SetGlobalMatrix(ShaderPropertyId.nonJitteredViewProjMatrix, cameraData.nonJitteredViewProjMatrix);
             cmd.SetGlobalVector(ShaderPropertyId.screenParams, new Vector4(cameraWidth, cameraHeight, 1.0f + 1.0f / cameraWidth, 1.0f + 1.0f / cameraHeight));
             cmd.SetGlobalVector(ShaderPropertyId.scaledScreenParams, new Vector4(scaledCameraWidth, scaledCameraHeight, 1.0f + 1.0f / scaledCameraWidth, 1.0f + 1.0f / scaledCameraHeight));
             cmd.SetGlobalVector(ShaderPropertyId.zBufferParams, zBufferParams);

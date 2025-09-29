@@ -1,4 +1,10 @@
-﻿using System;
+﻿//--------------------------------------------------------------------------------------------------------
+//  Copyright (C) 2025
+//  Author: Chin.Ro
+//  雾效组件
+//--------------------------------------------------------------------------------------------------------
+
+using System;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -8,7 +14,6 @@ namespace UnityEngine.Rendering.Universal
         [Tooltip("开启雾效.")]
         public BoolParameter enabled = new BoolParameter(false);
         
-        [Header("Atmosphere Fog")]
         public BoolParameter enableAtmosphereFog = new BoolParameter(false);
         public FloatParameter baseHeight = new FloatParameter(1000.0f);
         public FloatParameter maximumHeight = new FloatParameter(5000.0f);
@@ -17,25 +22,22 @@ namespace UnityEngine.Rendering.Universal
         [AdditionalProperty] public MinFloatParameter mipFogNear = new MinFloatParameter(0.0f, 0.0f);
         [AdditionalProperty] public MinFloatParameter mipFogFar = new MinFloatParameter(1000.0f, 0.0f);
         
-        [Header("Height Fog")]
-        public ClampedFloatParameter fogMaxOpacity = new ClampedFloatParameter(0.5f, 0f, 1f);
-        public ClampedFloatParameter fogFirstDensity = new ClampedFloatParameter(0.05f, 0f, 0.05f);
+        public ClampedFloatParameter fogFirstDensity = new ClampedFloatParameter(0.02f, 0f, 0.05f);
         public ClampedFloatParameter fogFirstHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f);
-        public ClampedFloatParameter fogSecondDensity = new ClampedFloatParameter(0.05f, 0f, 0.05f);
+        public ClampedFloatParameter fogSecondDensity = new ClampedFloatParameter(0f, 0f, 0.05f);
         public ClampedFloatParameter fogSecondHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f);
         public MinFloatParameter fogSecondHeight = new MinFloatParameter(0.0f, 0.0f);
-        public ColorParameter fogColor = new ColorParameter(new Color(0.447f, 0.639f, 1.0f), true, false, true);
+        public ColorParameter fogInscatteringColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
+        public ClampedFloatParameter fogMaxOpacity = new ClampedFloatParameter(1f, 0f, 1f);
+        [AdditionalProperty] public ClampedFloatParameter skyContributeFactor = new ClampedFloatParameter(1.0f, 0.0f, 1.0f);
         public ClampedFloatParameter fogStartDistance = new ClampedFloatParameter(0f, 0f, 10000f);
         public ClampedFloatParameter fogEndDistance = new ClampedFloatParameter(0f, 0f, 20000f);
         public ClampedFloatParameter fogCutoffDistance = new ClampedFloatParameter(0f, 0f, 200000);
         
-        [Header("InScattering")]
         public ClampedFloatParameter inScatterExponent = new ClampedFloatParameter(4f, 2f, 64f);
         public MinFloatParameter inScatteringStartDistance = new MinFloatParameter(0.0f, 0.0f);
-        public ColorParameter inScatterColor = new ColorParameter(new Color(0.25f, 0.25f, 0.125f), true, false, true);
-        public ClampedFloatParameter inScatterLuminance = new ClampedFloatParameter(0.5f, 0f, 1f);
+        public ColorParameter inScatterColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
         
-        [Header("Light Shafts")]
         public BoolParameter enableLightShafts = new BoolParameter(false);
         public ClampedFloatParameter occlusionMaskDarkness = new ClampedFloatParameter(0.25f, 0.0f, 1.0f);
         public MinFloatParameter occlusionDepthRange = new MinFloatParameter(300.0f, 0.0f);
@@ -44,20 +46,12 @@ namespace UnityEngine.Rendering.Universal
         public ClampedFloatParameter bloomThreshold = new ClampedFloatParameter(0.0f, 0.0f, 4.0f);
         public ClampedFloatParameter bloomMaxBrightness = new ClampedFloatParameter(100.0f, 0.0f, 100.0f);
         public ColorParameter bloomTint = new ColorParameter(Color.white);
-        [AdditionalProperty]
-        public IntParameter lightShaftBlurNumSamples = new IntParameter(12);
-        [AdditionalProperty]
-        public FloatParameter lightShaftFirstPassDistance = new FloatParameter(0.1f);
         
-        [Header("Volumetric Fog")]
         public BoolParameter enableVolumetricFog = new BoolParameter(false);
         public ColorParameter albedo = new ColorParameter(Color.white);
         public ClampedFloatParameter extinctionScale = new ClampedFloatParameter(1.0f, 0.0f, 10.0f);
-        public ClampedFloatParameter globalLightProbeDimmer = new ClampedFloatParameter(1.0f, 0.0f, 2.0f);
         public MinFloatParameter depthExtent = new MinFloatParameter(64.0f, 0.1f);
-        public FogDenoisingModeParameter denoisingMode = new FogDenoisingModeParameter(FogDenoisingMode.Gaussian);
         public ClampedFloatParameter anisotropy = new ClampedFloatParameter(0.0f, -1.0f, 1.0f);
-        [AdditionalProperty] public ClampedFloatParameter sliceDistributionUniformity = new ClampedFloatParameter(0.75f, 0, 1);
         
         // Limit parameters for the fog quality
         internal const float minFogScreenResolutionPercentage = (1.0f / 16.0f) * 100;
@@ -65,52 +59,7 @@ namespace UnityEngine.Rendering.Universal
         internal const float maxFogScreenResolutionPercentage = 0.5f * 100;
         internal const int maxFogSliceCount = 512;
         
-        [AdditionalProperty] public FogControlParameter fogControlMode = new FogControlParameter(FogControl.Balance);
-        [AdditionalProperty] public ClampedFloatParameter screenResolutionPercentage = new ClampedFloatParameter(optimalFogScreenResolutionPercentage, minFogScreenResolutionPercentage, maxFogScreenResolutionPercentage);
-        [AdditionalProperty] public ClampedIntParameter volumeSliceCount = new ClampedIntParameter(64, 1, maxFogSliceCount);
-        [AdditionalProperty] public ClampedFloatParameter volumetricFogBudget = new ClampedFloatParameter(0.5f, 0.0f, 1.0f);
-        [AdditionalProperty] public ClampedFloatParameter resolutionDepthRatio = new ClampedFloatParameter(0.5f, 0.0f, 1.0f);
         [AdditionalProperty] public BoolParameter directionalLightsOnly = new BoolParameter(false);
-        public enum FogDenoisingMode
-        {
-            None = 0,
-            Reprojection = 1 << 0,
-            Gaussian = 1 << 1,
-            Both = Reprojection | Gaussian
-        }
-        
-        /// <summary>
-        /// Options that control the quality and resource intensity of the volumetric fog.
-        /// </summary>
-        public enum FogControl
-        {
-            /// <summary>
-            /// Use this mode if you want to change the fog control properties based on a higher abstraction level centered around performance.
-            /// </summary>
-            Balance,
-
-            /// <summary>
-            /// Use this mode if you want to have direct access to the internal properties that control volumetric fog.
-            /// </summary>
-            Manual
-        }
-        
-        [Serializable]
-        public sealed class FogControlParameter : VolumeParameter<FogControl>
-        {
-            /// <summary>
-            /// Creates a new <see cref="FogControlParameter"/> instance.
-            /// </summary>
-            /// <param name="value">The initial value to store in the parameter.</param>
-            /// <param name="overrideState">The initial override state for the parameter.</param>
-            public FogControlParameter(FogControl value, bool overrideState = false) : base(value, overrideState) { }
-        }
-        
-        [Serializable]
-        public sealed class FogDenoisingModeParameter : VolumeParameter<FogDenoisingMode>
-        {
-            public FogDenoisingModeParameter(FogDenoisingMode value, bool overrideState = false) : base(value, overrideState) { }
-        }
 
         internal static bool IsFogEnabled(CameraData universalCamera)
         {
@@ -147,13 +96,24 @@ namespace UnityEngine.Rendering.Universal
 
             return a && b && c && d;
         }
+        
+        internal static bool IsVolumetricReprojectionEnabled(CameraData cameraData)
+        {
+            bool a = IsVolumetricFogEnabled(cameraData);
+            // We only enable volumetric re projection if we are processing the game view or a scene view with animated materials on
+            bool b = cameraData.cameraType == CameraType.Game || (cameraData.cameraType == CameraType.SceneView && CoreUtils.AreAnimatedMaterialsEnabled(cameraData.camera));
 
-        internal void UpdateShaderVariablesEnvironmentsCBFogParameters(ref ShaderVariablesEnvironments cb, CameraData universalCamera, bool isMainLightingExists)
+            bool c = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Reprojection) != 0;
+            
+            return a && b && c;
+        }
+
+        internal void UpdateShaderVariablesEnvironmentsCBFogParameters(ref ShaderVariablesEnvironments cb, CameraData universalCamera, bool isMainLightingExists, bool m_EnableLightShafts, bool m_EnableVolumetricFog)
         {
             int _FogEnabled = enabled.value ? 1 : 0;
             int _EnableAtmosphereFog = enableAtmosphereFog.value ? 1 : 0;
-            int _EnableLightShafts = enableLightShafts.value ? 1 : 0;
-            int _EnableVolumetricFog = enableVolumetricFog.value ? 1 : 0;
+            int _EnableLightShafts = m_EnableLightShafts ? 1 : 0;
+            int _EnableVolumetricFog = m_EnableVolumetricFog ? 1 : 0;
             
             cb._MipFogParameters = new Vector4(mipFogNear.value, mipFogFar.value, mipFogMaxMip.value, _EnableAtmosphereFog);
             
@@ -163,17 +123,17 @@ namespace UnityEngine.Rendering.Universal
             var ExponentialFogParameters2 = new Vector4(fogSecondDensity.value / 10f, fogSecondHeightFalloff.value / 10f,
                fogSecondHeight.value, fogCutoffDistance.value);
             var DirectionalInscatteringColor = new Vector4(
-                inScatterLuminance.value * inScatterColor.value.r,
-                inScatterLuminance.value * inScatterColor.value.g,
-                inScatterLuminance.value * inScatterColor.value.b,
+                inScatterColor.value.r,
+                inScatterColor.value.g,
+                inScatterColor.value.b,
                 inScatterExponent.value
             );
             
             var ExponentialFogParameters3 = new Vector4(USELESS_VALUE, USELESS_VALUE, fogEndDistance.value,  isMainLightingExists ? inScatteringStartDistance.value : -1);
             var ExponentialFogColorParameter = new Vector4(
-                fogColor.value.r,
-                fogColor.value.g,
-                fogColor.value.b,
+                fogInscatteringColor.value.r,
+                fogInscatteringColor.value.g,
+                fogInscatteringColor.value.b,
                 enabled.value ?fogMaxOpacity.value : 0
             );
             
@@ -194,8 +154,8 @@ namespace UnityEngine.Rendering.Universal
             float layerDepth = Mathf.Max(0.01f, maximumHeight.value - baseHeight.value);
             float H = VolumetricLightingUtils.ScaleHeightFromLayerDepth(layerDepth);
             cb._HeightFogExponents = new Vector4(1.0f / H, H, data.extinction, crBaseHeight);
-            cb._GlobalFogParam1 = new Vector4(anisotropy.value, globalLightProbeDimmer.value, extinctionScale.value, _FogEnabled);
-            int _VolumetricFilteringEnabled = ((int)denoisingMode.value & (int)Fog.FogDenoisingMode.Gaussian) != 0 ? 1 : 0;
+            cb._GlobalFogParam1 = new Vector4(anisotropy.value, skyContributeFactor.value, extinctionScale.value, _FogEnabled);
+            int _VolumetricFilteringEnabled = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0 ? 1 : 0;
             int _FogDirectionalOnly = directionalLightsOnly.value ? 1 : 0;
             cb._GlobalFogParam2 = new Vector4(_EnableLightShafts, _EnableVolumetricFog, _VolumetricFilteringEnabled, _FogDirectionalOnly);
         }

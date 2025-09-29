@@ -88,26 +88,31 @@ namespace UnityEditor.Rendering.Universal
             }
             else if (m_BloomMode.value.enumValueIndex == (int)BloomMode.UE)
             {
-                EditorGUI.indentLevel++;
-                _UEBloomFolderExpanded = EditorGUILayout.Foldout(_UEBloomFolderExpanded, new GUIContent("UE Bloom Settings", "Settings for UE-style bloom effect."), true);
-                if (_UEBloomFolderExpanded)
+                using (new EditorGUILayout.VerticalScope("box"))
                 {
-                    PropertyField(m_BloomSizeScale);
-                    PropertyField(m_Bloom1Size);
-                    PropertyField(m_Bloom2Size);
-                    PropertyField(m_Bloom3Size);
-                    PropertyField(m_Bloom4Size);
-                    PropertyField(m_Bloom5Size);
-                    PropertyField(m_Bloom6Size);
-                    PropertyField(m_Bloom1Tint);
-                    PropertyField(m_Bloom2Tint);
-                    PropertyField(m_Bloom3Tint);
-                    PropertyField(m_Bloom4Tint);
-                    PropertyField(m_Bloom5Tint);
-                    PropertyField(m_Bloom6Tint);
-                }
+                    EditorGUI.indentLevel++;
+                    _UEBloomFolderExpanded = EditorGUILayout.Foldout(_UEBloomFolderExpanded, new GUIContent("UE Bloom Settings", "Settings for UE-style bloom effect."), true);
+                    if (_UEBloomFolderExpanded)
+                    {
+                        EditorGUI.indentLevel--;
+                        PropertyField(m_BloomSizeScale);
+                        PropertyField(m_Bloom1Size);
+                        PropertyField(m_Bloom2Size);
+                        PropertyField(m_Bloom3Size);
+                        PropertyField(m_Bloom4Size);
+                        PropertyField(m_Bloom5Size);
+                        PropertyField(m_Bloom6Size);
+                        PropertyField(m_Bloom1Tint);
+                        PropertyField(m_Bloom2Tint);
+                        PropertyField(m_Bloom3Tint);
+                        PropertyField(m_Bloom4Tint);
+                        PropertyField(m_Bloom5Tint);
+                        PropertyField(m_Bloom6Tint);
+                        EditorGUI.indentLevel++;
+                    }
                 
-                EditorGUI.indentLevel--;
+                    EditorGUI.indentLevel--;
+                }
             }
             
             PropertyField(m_DirtTexture);

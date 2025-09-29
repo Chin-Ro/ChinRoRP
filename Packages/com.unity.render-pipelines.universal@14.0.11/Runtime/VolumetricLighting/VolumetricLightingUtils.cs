@@ -6,6 +6,7 @@
 
 using System;
 using Unity.Mathematics;
+using UnityEngine.Experimental.Rendering;
 using static Unity.Mathematics.math;
 
 namespace UnityEngine.Rendering.Universal
@@ -14,21 +15,20 @@ namespace UnityEngine.Rendering.Universal
     #region VolumetricLightingUtils
     public class VolumetricLightingUtils
     {
-        
-        private static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
+        internal static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
         {
-            if (fog.fogControlMode == Fog.FogControl.Balance)
+            if (EnvironmentsRenderFeature.m_FogControl == FogControl.Balance)
             {
                 // Evaluate the ssFraction and sliceCount based on the control parameters
-                float maxScreenSpaceFraction = (1.0f - fog.resolutionDepthRatio.value) * (Fog.maxFogScreenResolutionPercentage - Fog.minFogScreenResolutionPercentage) + Fog.minFogScreenResolutionPercentage;
-                screenFraction = Mathf.Lerp(Fog.minFogScreenResolutionPercentage, maxScreenSpaceFraction, fog.volumetricFogBudget.value) * 0.01f;
-                float maxSliceCount = Mathf.Max(1.0f, fog.resolutionDepthRatio.value * Fog.maxFogSliceCount);
-                sliceCount = (int)Mathf.Lerp(1.0f, maxSliceCount, fog.volumetricFogBudget.value);
+                float maxScreenSpaceFraction = (1.0f - EnvironmentsRenderFeature.m_ResolutionDepthRatio) * (Fog.maxFogScreenResolutionPercentage - Fog.minFogScreenResolutionPercentage) + Fog.minFogScreenResolutionPercentage;
+                screenFraction = Mathf.Lerp(Fog.minFogScreenResolutionPercentage, maxScreenSpaceFraction, EnvironmentsRenderFeature.m_FolumetricFogBudget) * 0.01f;
+                float maxSliceCount = Mathf.Max(1.0f, EnvironmentsRenderFeature.m_ResolutionDepthRatio * Fog.maxFogSliceCount);
+                sliceCount = (int)Mathf.Lerp(1.0f, maxSliceCount, EnvironmentsRenderFeature.m_FolumetricFogBudget);
             }
             else
             {
-                screenFraction = fog.screenResolutionPercentage.value * 0.01f;
-                sliceCount = fog.volumeSliceCount.value;
+                screenFraction = EnvironmentsRenderFeature.m_ScreenResolutionPercentage * 0.01f;
+                sliceCount = EnvironmentsRenderFeature.m_VolumeSliceCount;
             }
         }
 
@@ -41,14 +41,14 @@ namespace UnityEngine.Rendering.Universal
             int viewportHeight = universalCamera.scaledHeight;
 
             ComputeVolumetricFogSliceCountAndScreenFraction(controller, out var sliceCount, out var screenFraction);
-            if (controller.fogControlMode == Fog.FogControl.Balance)
+            if (EnvironmentsRenderFeature.m_FogControl == FogControl.Balance)
             {
                 // Evaluate the voxel size
                 voxelSize = 1.0f / screenFraction;
             }
             else
             {
-                if (controller.screenResolutionPercentage.value == Fog.optimalFogScreenResolutionPercentage)
+                if (EnvironmentsRenderFeature.m_ScreenResolutionPercentage == Fog.optimalFogScreenResolutionPercentage)
                     voxelSize = 8;
                 else
                     voxelSize = 1.0f / screenFraction; // Does not account for rounding (same function, above)
@@ -73,7 +73,7 @@ namespace UnityEngine.Rendering.Universal
                 universalCamera.camera.nearClipPlane,
                 universalCamera.camera.farClipPlane,
                 universalCamera.camera.fieldOfView,
-                controller.sliceDistributionUniformity.value,
+                EnvironmentsRenderFeature.m_SliceDistributionUniformity,
                 voxelSize);
         }
         
@@ -149,15 +149,6 @@ namespace UnityEngine.Rendering.Universal
             return (3.0f / (8.0f * Mathf.PI)) * (1.0f - g * g) / (2.0f + g * g);
         }
         
-        private static bool IsVolumetricReprojectionEnabled(CameraData camera)
-        {
-            bool a = Fog.IsVolumetricFogEnabled(camera);
-            // We only enable volumetric re projection if we are processing the game view or a scene view with animated materials on
-            bool b = camera.cameraType == CameraType.Game || (camera.cameraType == CameraType.SceneView && CoreUtils.AreAnimatedMaterialsEnabled(camera.camera));
-
-            return a && b;
-        }
-        
         // Ref: https://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
         // The returned {x, y} coordinates (and all spheres) are all within the (-0.5, 0.5)^2 range.
         // The pattern has been rotated by 15 degrees to maximize the resolution along X and Y:
@@ -208,18 +199,24 @@ namespace UnityEngine.Rendering.Universal
         // | x | x | x | x | x | x | x |
         static float[] m_zSeq = { 7.0f / 14.0f, 3.0f / 14.0f, 11.0f / 14.0f, 5.0f / 14.0f, 9.0f / 14.0f, 1.0f / 14.0f, 13.0f / 14.0f };
         static Vector2[] m_xySeq = new Vector2[7];
+        
+        private static float ProjectionMatrixAspect(in Matrix4x4 matrix)
+            => -matrix.m11 / matrix.m00;
 
         internal static void UpdateShaderVariableslVolumetrics(ref ShaderVariablesVolumetric cb, CameraData universalCamera, in Vector4 resolution,
-            int m_VisibleLocalVolumetricFogVolumesCount, bool volumetricHistoryIsValid, VBufferParameters[] vBufferParams)
+            int m_VisibleLocalVolumetricFogVolumesCount, VBufferParameters[] vBufferParams)
         {
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             var vFoV = universalCamera.camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
             int frameIndex = EnvironmentsRenderFeature.frameIndex;
-
+            
+            Matrix4x4 projMax = GL.GetGPUProjectionMatrix(universalCamera.camera.projectionMatrix, true);
+            var gpuAspect = ProjectionMatrixAspect(projMax);
+            cb._VBufferCoordToViewDirWS = UniversalUtils.ComputePixelCoordToWorldSpaceViewDirectionMatrix(universalCamera.camera, projMax, universalCamera.GetViewMatrix(), resolution, gpuAspect);
             cb._VBufferUnitDepthTexelSpacing = UniversalUtils.ComputZPlaneTexelSpacing(1.0f, vFoV, resolution.y);
             cb._NumVisibleLocalVolumetricFog = (uint)m_VisibleLocalVolumetricFogVolumesCount;
             cb._CornetteShanksConstant = CornetteShanksPhasePartConstant(fog.anisotropy.value);
-            cb._VBufferHistoryIsValid = volumetricHistoryIsValid ? 1u : 0u;
+            cb._VBufferHistoryIsValid = universalCamera.volumetricHistoryIsValid ? 1u : 0u;
 
             GetHexagonalClosePackedSpheres7(m_xySeq);
             int sampleIndex = EnvironmentsRenderFeature.frameIndex % 7;
@@ -243,7 +240,7 @@ namespace UnityEngine.Rendering.Universal
             // Additionally, history buffers can have different sizes, since they are not resized at the same time.
             Vector3Int historyBufferSize = Vector3Int.zero;
 
-            if (IsVolumetricReprojectionEnabled(universalCamera))
+            if (Fog.IsVolumetricReprojectionEnabled(universalCamera))
             {
                 historyBufferSize = pvp;
             }
@@ -271,6 +268,99 @@ namespace UnityEngine.Rendering.Universal
             float3 axisAlignedPoint = float3(dot(offset, normalize(obb.right)), dot(offset, normalize(obb.up)), dot(offset, boxForward));
 
             return DistanceToOriginAABB(axisAlignedPoint, float3(obb.extentX, obb.extentY, obb.extentZ));
+        }
+        
+        // Must be called AFTER UpdateVolumetricBufferParams.
+        static readonly string[] volumetricHistoryBufferNames = new string[2] { "VBufferHistory0", "VBufferHistory1" };
+        internal static void ResizeVolumetricHistoryBuffers(CameraData universalCamera, VBufferParameters[] vBufferParams)
+        {
+            if (!Fog.IsVolumetricReprojectionEnabled(universalCamera))
+                return;
+
+            Debug.Assert(vBufferParams != null);
+            Debug.Assert(vBufferParams.Length == 2);
+            Debug.Assert(universalCamera.volumetricHistoryBuffers != null);
+
+            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            var currIdx = (frameIndex + 0) & 1;
+            var prevIdx = (frameIndex + 1) & 1;
+
+            var currentParams = vBufferParams[currIdx];
+
+            // Render texture contents can become "lost" on certain events, like loading a new level,
+            // system going to a screensaver mode, in and out of fullscreen and so on.
+            // https://docs.unity3d.com/ScriptReference/RenderTexture.html
+            if (universalCamera.volumetricHistoryBuffers[0] == null || universalCamera.volumetricHistoryBuffers[1] == null)
+            {
+                DestroyVolumetricHistoryBuffers(universalCamera);
+                CreateVolumetricHistoryBuffers(universalCamera, vBufferParams.Length); // Basically, assume it's 2
+            }
+
+            // We only resize the feedback buffer (#0), not the history buffer (#1).
+            // We must NOT resize the buffer from the previous frame (#1), as that would invalidate its contents.
+            ResizeVolumetricBuffer(ref universalCamera.volumetricHistoryBuffers[currIdx], volumetricHistoryBufferNames[currIdx], currentParams.viewportSize.x,
+                currentParams.viewportSize.y,
+                currentParams.viewportSize.z);
+        }
+        
+        // Do not access 'rt.name', it allocates memory every time...
+        // Have to manually cache and pass the name.
+        private static void ResizeVolumetricBuffer(ref RTHandle rt, string name, int viewportWidth, int viewportHeight, int viewportDepth)
+        {
+            Debug.Assert(rt != null);
+
+            int width = rt.rt.width;
+            int height = rt.rt.height;
+            int depth = rt.rt.volumeDepth;
+
+            bool realloc = (width != viewportWidth) || (height != viewportHeight) || (depth != viewportDepth);
+
+            if (realloc)
+            {
+                RTHandles.Release(rt);
+
+                rt = RTHandles.Alloc(viewportWidth, viewportHeight, viewportDepth, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, // 8888_sRGB is not precise enough
+                    dimension: TextureDimension.Tex3D, enableRandomWrite: true, name: name);
+            }
+        }
+        
+        internal static void DestroyVolumetricHistoryBuffers(CameraData universalCamera)
+        {
+            if (universalCamera.volumetricHistoryBuffers == null)
+                return;
+
+            int bufferCount = universalCamera.volumetricHistoryBuffers.Length;
+
+            for (int i = 0; i < bufferCount; i++)
+            {
+                RTHandles.Release(universalCamera.volumetricHistoryBuffers[i]);
+            }
+
+            universalCamera.volumetricHistoryBuffers = null;
+            universalCamera.volumetricHistoryIsValid = false;
+        }
+        
+        internal static void CreateVolumetricHistoryBuffers(CameraData universalCamera, int bufferCount)
+        {
+            if (!Fog.IsVolumetricFogEnabled(universalCamera))
+                return;
+
+            Debug.Assert(universalCamera.volumetricHistoryBuffers == null);
+
+            universalCamera.volumetricHistoryBuffers = new RTHandle[bufferCount];
+
+            // Allocation happens early in the frame. So we shouldn't rely on 'hdCamera.vBufferParams'.
+            // Allocate the smallest possible 3D texture.
+            // We will perform rescaling manually, in a custom manner, based on volume parameters.
+            const int minSize = 4;
+
+            for (int i = 0; i < bufferCount; i++)
+            {
+                universalCamera.volumetricHistoryBuffers[i] = RTHandles.Alloc(minSize, minSize, minSize, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, // 8888_sRGB is not precise enough
+                    dimension: TextureDimension.Tex3D, enableRandomWrite: true, name: string.Format("VBufferHistory{0}", i));
+            }
+
+            universalCamera.volumetricHistoryIsValid = false;
         }
     }
     #endregion
@@ -495,6 +585,7 @@ namespace UnityEngine.Rendering.Universal
     
     struct ShaderVariablesVolumetric
     {
+        public Matrix4x4 _VBufferCoordToViewDirWS;
         public float _VBufferUnitDepthTexelSpacing;
         public uint _NumVisibleLocalVolumetricFog;
         public float _CornetteShanksConstant;

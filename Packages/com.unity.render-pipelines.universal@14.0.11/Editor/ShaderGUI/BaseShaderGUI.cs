@@ -931,6 +931,7 @@ namespace UnityEditor
                     SetMaterialSrcDstBlendProperties(material, UnityEngine.Rendering.BlendMode.One, UnityEngine.Rendering.BlendMode.Zero);
                     zwrite = true;
                     material.DisableKeyword(ShaderKeywordStrings._ALPHAPREMULTIPLY_ON);
+                    material.DisableKeyword(ShaderKeywordStrings._ALPHAADDITIVE_ON);
                     material.DisableKeyword(ShaderKeywordStrings._ALPHAMODULATE_ON);
                 }
                 else // SurfaceType Transparent
@@ -1005,6 +1006,7 @@ namespace UnityEditor
                         srcBlendA, dstBlendA); // Alpha
 
                     CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAPREMULTIPLY_ON, preserveSpecular);
+                    CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAADDITIVE_ON, blendMode == BlendMode.Additive);
                     CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAMODULATE_ON, blendMode == BlendMode.Multiply);
 
                     // General Transparent Material Settings

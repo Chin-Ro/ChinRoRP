@@ -57,7 +57,7 @@ CBUFFER_END
 #define _HeightFogBaseExtinction _HeightFogExponents.z;
 #define _HeightFogBaseHeight _HeightFogExponents.w
 #define _GlobalFogAnisotropy _GlobalFogParam1.x;
-#define _GlobalLightProbeDimmer _GlobalFogParam1.y
+#define _SkyContributeFactor _GlobalFogParam1.y
 #define _ExtinctionScale _GlobalFogParam1.z
 #define _FogEnabled _GlobalFogParam1.w
 #define _EnableLightShafts _GlobalFogParam2.x

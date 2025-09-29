@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Mathematics;
 using UnityEngine.Assertions;
 using UnityEngine.Experimental.GlobalIllumination;
 using UnityEngine.Experimental.Rendering;
@@ -201,6 +202,9 @@ namespace UnityEngine.Rendering.Universal
     {
         static Dictionary<Camera, CameraData> s_Cameras = new Dictionary<Camera, CameraData>(); 
         static List<Camera> s_Cleanup = new List<Camera>();
+
+        internal bool isFirstFrame;
+        
         public static CameraData GetOrCreate(Camera camera)
         {
             CameraData cameraData;
@@ -253,7 +257,7 @@ namespace UnityEngine.Rendering.Universal
 
         void Dispose()
         {
-            
+            VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(this);
         }
         
         // Internal camera data as we are not yet sure how to expose View in stereo context.
@@ -261,6 +265,8 @@ namespace UnityEngine.Rendering.Universal
         Matrix4x4 m_ViewMatrix;
         Matrix4x4 m_ProjectionMatrix;
         Matrix4x4 m_JitterMatrix;
+        internal Matrix4x4 prevViewProjectionMatrix;
+        internal Matrix4x4 nonJitteredViewProjMatrix;
 
         internal void SetViewAndProjectionMatrix(Matrix4x4 viewMatrix, Matrix4x4 projectionMatrix)
         {
@@ -782,6 +788,11 @@ namespace UnityEngine.Rendering.Universal
         public Vector3 worldSpaceCameraPos;
 
         /// <summary>
+        /// Preview camera position in world space.
+        /// </summary>
+        public Vector3 prevWorldSpaceCameraPos;
+
+        /// <summary>
         /// Final background color in the active color space.
         /// </summary>
         public Color backgroundColor;
@@ -807,6 +818,12 @@ namespace UnityEngine.Rendering.Universal
         /// Camera at the top of the overlay camera stack
         /// </summary>
         public Camera baseCamera;
+        
+        internal RTHandle[] volumetricHistoryBuffers;
+        
+        internal int volumetricValidFrames = 0;
+        
+        internal bool volumetricHistoryIsValid = false;
     }
 
     /// <summary>
@@ -1022,6 +1039,7 @@ namespace UnityEngine.Rendering.Universal
 
         public static readonly int scaledScreenParams = Shader.PropertyToID("_ScaledScreenParams");
         public static readonly int worldSpaceCameraPos = Shader.PropertyToID("_WorldSpaceCameraPos");
+        public static readonly int prevWorldSpaceCameraPos = Shader.PropertyToID("_PrevWorldSpaceCameraPos");
         public static readonly int screenParams = Shader.PropertyToID("_ScreenParams");
         public static readonly int alphaToMaskAvailable = Shader.PropertyToID("_AlphaToMaskAvailable");
         public static readonly int projectionParams = Shader.PropertyToID("_ProjectionParams");
@@ -1036,6 +1054,9 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int viewMatrix = Shader.PropertyToID("unity_MatrixV");
         public static readonly int projectionMatrix = Shader.PropertyToID("glstate_matrix_projection");
         public static readonly int viewAndProjectionMatrix = Shader.PropertyToID("unity_MatrixVP");
+        
+        public static readonly int prevViewProjMatrix = Shader.PropertyToID("_PrevViewProjMatrix");
+        public static readonly int nonJitteredViewProjMatrix = Shader.PropertyToID("_NonJitteredViewProjMatrix");
 
         public static readonly int inverseViewMatrix = Shader.PropertyToID("unity_MatrixInvV");
         public static readonly int inverseProjectionMatrix = Shader.PropertyToID("unity_MatrixInvP");
@@ -1367,6 +1388,9 @@ namespace UnityEngine.Rendering.Universal
 
         /// <summary> Keyword used for Alpha premultiply. </summary>
         public const string _ALPHAPREMULTIPLY_ON = "_ALPHAPREMULTIPLY_ON";
+        
+        /// <summary> Keyword used for Alpha additive. </summary>
+        public const string _ALPHAADDITIVE_ON = "_ALPHAADDITIVE_ON";
 
         /// <summary> Keyword used for Alpha modulate. </summary>
         public const string _ALPHAMODULATE_ON = "_ALPHAMODULATE_ON";
@@ -1426,6 +1450,7 @@ namespace UnityEngine.Rendering.Universal
         static Vector4 k_DefaultLightAttenuation = new Vector4(0.0f, 1.0f, 0.0f, 1.0f);
         static Vector4 k_DefaultLightSpotDirection = new Vector4(0.0f, 0.0f, 1.0f, 0.0f);
         static Vector4 k_DefaultLightsProbeChannel = new Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+        static Vector4 k_DefaultLightVolumetric = new Vector4(0.0f, 1.0f, 1.0f, 0.0f);
 
         static List<Vector4> m_ShadowBiasData = new List<Vector4>();
         static List<int> m_ShadowResolutionData = new List<int>();
@@ -1769,17 +1794,22 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="lights">List of lights to iterate.</param>
         /// <param name="lightIndex">The index of the light.</param>
         /// <param name="lightPos">The position of the light.</param>
+        /// <param name="lightForward">The forward direction of the light.</param>
+        /// <param name="lightUp">The up direction of the light.</param>
+        /// <param name="lightRight">The right direction of the light.</param>
         /// <param name="lightColor">The color of the light.</param>
         /// <param name="lightAttenuation">The attenuation of the light.</param>
         /// <param name="lightSpotDir">The direction of the light.</param>
         /// <param name="lightOcclusionProbeChannel">The occlusion probe channel for the light.</param>
-        public static void InitializeLightConstants_Common(NativeArray<VisibleLight> lights, int lightIndex, out Vector4 lightPos, out Vector4 lightColor, out Vector4 lightAttenuation, out Vector4 lightSpotDir, out Vector4 lightOcclusionProbeChannel)
+        /// <param name="lightVolumetric">The volumetric params for the light.</param>
+        public static void InitializeLightConstants_Common(NativeArray<VisibleLight> lights, int lightIndex, out Vector4 lightPos, out Vector4 lightColor, out Vector4 lightAttenuation, out Vector4 lightSpotDir, out Vector4 lightOcclusionProbeChannel, out Vector4 lightVolumetric)
         {
             lightPos = k_DefaultLightPosition;
             lightColor = k_DefaultLightColor;
             lightOcclusionProbeChannel = k_DefaultLightsProbeChannel;
             lightAttenuation = k_DefaultLightAttenuation;  // Directional by default.
             lightSpotDir = k_DefaultLightSpotDirection;
+            lightVolumetric = k_DefaultLightVolumetric;
 
             // When no lights are visible, main light will be set to -1.
             // In this case we initialize it to default values and return
@@ -1819,6 +1849,13 @@ namespace UnityEngine.Rendering.Universal
                 light.bakingOutput.occlusionMaskChannel < 4)
             {
                 lightOcclusionProbeChannel[light.bakingOutput.occlusionMaskChannel] = 1.0f;
+            }
+
+            var additionalLightData = light?.GetUniversalAdditionalLightData();
+            if (additionalLightData != null)
+            {
+                lightVolumetric = new Vector4(additionalLightData.useVolumetric ? 1.0f : 0.0f, additionalLightData.volumetricDimmer,
+                    additionalLightData.volumetricShadowDimmer, 0);
             }
         }
     }

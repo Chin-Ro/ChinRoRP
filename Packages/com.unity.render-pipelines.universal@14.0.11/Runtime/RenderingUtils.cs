@@ -531,7 +531,7 @@ namespace UnityEngine.Rendering.Universal
                 return true;
             if (handle.useScaling != scaled)
                 return true;
-            if (!scaled && (handle.rt.width != descriptor.width || handle.rt.height != descriptor.height))
+            if (!scaled && (handle.rt.width != descriptor.width || handle.rt.height != descriptor.height || handle.rt.volumeDepth != descriptor.slices))
                 return true;
             return
                 (DepthBits)handle.rt.descriptor.depthBufferBits != descriptor.depthBufferBits ||

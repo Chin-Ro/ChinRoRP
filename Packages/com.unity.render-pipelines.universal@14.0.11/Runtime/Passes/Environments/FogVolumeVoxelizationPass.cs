@@ -88,7 +88,7 @@ namespace UnityEngine.Rendering.Universal
             passData.computeRenderingParametersKernel = passData.volumetricMaterialCS.FindKernel("ComputeVolumetricMaterialRenderingParameters");
             passData.viewportSize = currParams.viewportSize;
             
-            ComputeVolumetricFogSliceCountAndScreenFraction(passData.fog, out passData.maxSliceCount, out _);
+            VolumetricLightingUtils.ComputeVolumetricFogSliceCountAndScreenFraction(passData.fog, out passData.maxSliceCount, out _);
 
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, new ProfilingSampler("Fog Volume Voxelization")))
@@ -211,23 +211,6 @@ namespace UnityEngine.Rendering.Universal
                         );
                     }
                 }
-            }
-        }
-        
-        static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
-        {
-            if (fog.fogControlMode == Fog.FogControl.Balance)
-            {
-                // Evaluate the ssFraction and sliceCount based on the control parameters
-                float maxScreenSpaceFraction = (1.0f - fog.resolutionDepthRatio.value) * (Fog.maxFogScreenResolutionPercentage - Fog.minFogScreenResolutionPercentage) + Fog.minFogScreenResolutionPercentage;
-                screenFraction = Mathf.Lerp(Fog.minFogScreenResolutionPercentage, maxScreenSpaceFraction, fog.volumetricFogBudget.value) * 0.01f;
-                float maxSliceCount = Mathf.Max(1.0f, fog.resolutionDepthRatio.value * Fog.maxFogSliceCount);
-                sliceCount = (int)Mathf.Lerp(1.0f, maxSliceCount, fog.volumetricFogBudget.value);
-            }
-            else
-            {
-                screenFraction = fog.screenResolutionPercentage.value * 0.01f;
-                sliceCount = fog.volumeSliceCount.value;
             }
         }
         

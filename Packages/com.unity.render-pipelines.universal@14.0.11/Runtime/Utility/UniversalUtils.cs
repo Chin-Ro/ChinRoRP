@@ -14,6 +14,19 @@ namespace UnityEngine.Rendering.Universal
         internal static float ProjectionMatrixAspect(in Matrix4x4 matrix)
             => - matrix.m11 / matrix.m00;
         
+        internal static Matrix4x4 ComputePixelCoordToWorldSpaceViewDirectionMatrix(Camera camera, Matrix4x4 projectionMatrix, Matrix4x4 viewMatrix, Vector4 resolution, float aspect)
+        {
+            float verticalFoV = camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
+            if (!camera.usePhysicalProperties)
+            {
+                verticalFoV = Mathf.Atan(-1.0f / GL.GetGPUProjectionMatrix(projectionMatrix, false)[1, 1]) * 2;
+            }
+                
+            Vector2 lensShift = camera.GetGateFittedLensShift();
+            
+            return ComputePixelCoordToWorldSpaceViewDirectionMatrix(verticalFoV, lensShift, resolution, viewMatrix, false, aspect, camera.orthographic);
+        }
+        
         internal static Matrix4x4 ComputePixelCoordToWorldSpaceViewDirectionMatrix(float verticalFoV, Vector2 lensShift, Vector4 screenSize, Matrix4x4 worldToViewMatrix, bool renderToCubemap, float aspectRatio = -1, bool isOrthographic = false)
         {
             Matrix4x4 viewSpaceRasterTransform;
@@ -116,6 +129,35 @@ namespace UnityEngine.Rendering.Universal
             }
             else
                 return Matrix4x4.Perspective(camera.GetGateFittedFieldOfView(), camera.aspect, camera.nearClipPlane, camera.farClipPlane);
+        }
+        
+        /// <summary>
+        /// Extract scale and bias from a fade distance to achieve a linear fading starting at 90% of the fade distance.
+        /// </summary>
+        /// <param name="fadeDistance">Distance at which object should be totally fade</param>
+        /// <param name="scale">[OUT] Slope of the fading on the fading part</param>
+        /// <param name="bias">[OUT] Ordinate of the fading part at abscissa 0</param>
+        internal static void GetScaleAndBiasForLinearDistanceFade(float fadeDistance, out float scale, out float bias)
+        {
+            // Fade with distance calculation is just a linear fade from 90% of fade distance to fade distance. 90% arbitrarily chosen but should work well enough.
+            float distanceFadeNear = 0.9f * fadeDistance;
+            scale = 1.0f / (fadeDistance - distanceFadeNear);
+            bias = -distanceFadeNear / (fadeDistance - distanceFadeNear);
+        }
+        
+        /// <summary>
+        /// Compute the linear fade distance
+        /// </summary>
+        /// <param name="distanceToCamera">Distance from the object to fade from the camera</param>
+        /// <param name="fadeDistance">Distance at witch the object is totally faded</param>
+        /// <returns>Computed fade factor</returns>
+        internal static float ComputeLinearDistanceFade(float distanceToCamera, float fadeDistance)
+        {
+            float scale;
+            float bias;
+            GetScaleAndBiasForLinearDistanceFade(fadeDistance, out scale, out bias);
+
+            return 1.0f - Mathf.Clamp01(distanceToCamera * scale + bias);
         }
     }
     

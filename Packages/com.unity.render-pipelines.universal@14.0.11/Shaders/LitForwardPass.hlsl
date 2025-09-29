@@ -6,6 +6,10 @@
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
 
+#if defined(_SURFACE_TYPE_TRANSPARENT)
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/AtmosphericScattering.hlsl"
+#endif
+
 // GLES2 has limited amount of interpolators
 #if defined(_PARALLAXMAP) && !defined(SHADER_API_GLES)
 #define REQUIRES_TANGENT_SPACE_VIEW_DIR_INTERPOLATOR
@@ -234,6 +238,12 @@ void LitPassFragment(
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
+    
+#if defined(_SURFACE_TYPE_TRANSPARENT)
+    float4 positionSS = input.positionCS;
+    PositionInputs posInput = GetPositionInput(positionSS.xy, _ScreenSize.zw, positionSS.z, positionSS.w, input.positionWS);
+    color = EvaluateAtmosphericScattering(posInput, inputData.viewDirectionWS, inputData.normalizedScreenSpaceUV, color);
+#endif
 
     outColor = color;
 

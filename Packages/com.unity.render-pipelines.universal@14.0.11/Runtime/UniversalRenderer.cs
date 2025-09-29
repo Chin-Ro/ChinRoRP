@@ -1119,7 +1119,7 @@ namespace UnityEngine.Rendering.Universal
             // If a depth texture was created we necessarily need to copy it, otherwise we could have render it to a renderbuffer.
             // Also skip if Deferred+RenderPass as CameraDepthTexture is used and filled by the GBufferPass
             // however we might need the depth texture with Forward-only pass rendered to it, so enable the copy depth in that case
-            if (requiresDepthCopyPass && !(this.renderingModeActual == RenderingMode.Deferred && useRenderPassEnabled && !renderPassInputs.requiresDepthTexture))
+            if (requiresDepthCopyPass && !(this.renderingModeActual == RenderingMode.Deferred && !renderPassInputs.requiresDepthTexture))
             {
                 m_CopyDepthPass.Setup(m_ActiveCameraDepthAttachment, m_DepthTexture);
                 EnqueuePass(m_CopyDepthPass);

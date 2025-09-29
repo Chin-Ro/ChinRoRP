@@ -20,6 +20,8 @@ namespace UnityEditor.Rendering
             public static readonly GUIContent renderingHeader = EditorGUIUtility.TrTextContent("Rendering");
             /// <summary>Title with "Emission"</summary>
             public static readonly GUIContent emissionHeader = EditorGUIUtility.TrTextContent("Emission");
+            /// <summary>Title with "Volumetric"</summary>
+            public static readonly GUIContent volumetricHeader = EditorGUIUtility.TrTextContent("Volumetric");
             /// <summary>Title with "Shadows"</summary>
             public static readonly GUIContent shadowHeader = EditorGUIUtility.TrTextContent("Shadows");
             /// <summary>Title with "Light Layer"</summary>

@@ -45,6 +45,7 @@ float4 _TimeParameters; // t, sin(t), cos(t)
 
 #if !defined(USING_STEREO_MATRICES)
 float3 _WorldSpaceCameraPos;
+float3 _PrevWorldSpaceCameraPos;
 #endif
 
 // x = 1 or -1 (-1 if projection is flipped)

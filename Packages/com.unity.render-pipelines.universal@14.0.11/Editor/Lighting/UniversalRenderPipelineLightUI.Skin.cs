@@ -30,6 +30,13 @@ namespace UnityEditor.Rendering.Universal
             public static readonly GUIContent ShadowNormalBias = EditorGUIUtility.TrTextContent("Normal", "Determines the bias this Light applies along the normal of surfaces it illuminates. This is ignored for point lights.");
             public static readonly GUIContent ShadowDepthBias = EditorGUIUtility.TrTextContent("Depth", "Determines the bias at which shadows are pushed away from the shadow-casting Game Object along the line from the Light.");
             public static readonly GUIContent ShadowInfo = EditorGUIUtility.TrTextContent("Unity might reduce the Light's shadow resolution to ensure that shadow maps fit in the shadow atlas. Consider this when selecting the the size of the shadow atlas, the shadow resolution of Lights, the number of Lights in your scene and whether you use soft shadows.");
+            
+            // Volumetric Additional light data
+            public static readonly GUIContent VolumetricEnable = EditorGUIUtility.TrTextContent("Enable", "When enabled, this Light uses Volumetrics.");
+            public static readonly GUIContent VolumetricDimmer = EditorGUIUtility.TrTextContent("Multiplier", "Controls the intensity of the scattered Volumetric lighting.");
+            public static readonly GUIContent VolumetricFadeDistance = EditorGUIUtility.TrTextContent("Fade Distance", "Sets the distance from the camera at which light smoothly fades out from contributing to volumetric lighting.");
+            // Volumetric Additional shadow data
+            public static readonly GUIContent VolumetricShadowDimmer = EditorGUIUtility.TrTextContent("Shadow Dimmer", "Dims the volumetric shadows this Light casts.");
 
             // Resolution (default or custom)
             public static readonly GUIContent ShadowResolution = EditorGUIUtility.TrTextContent("Resolution", $"Sets the rendered resolution of the shadow maps. A higher resolution increases the fidelity of shadows at the cost of GPU performance and memory usage. Rounded to the next power of two, and clamped to be at least {UniversalAdditionalLightData.AdditionalLightsShadowMinimumResolution}.");

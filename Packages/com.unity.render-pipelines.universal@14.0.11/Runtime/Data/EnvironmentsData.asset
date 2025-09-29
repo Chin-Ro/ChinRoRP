@@ -17,7 +17,12 @@ MonoBehaviour:
     type: 3}
   volumetricMaterialCS: {fileID: 7200000, guid: dbf0c03a218d432da163c200a6b2806f,
     type: 3}
+  volumetricLightingCS: {fileID: 7200000, guid: 94f312b7afe4453d91b49c210b0c3fee,
+    type: 3}
+  volumetricLightingFilteringCS: {fileID: 7200000, guid: 46125b415429414f82e70eebbf665c2b,
+    type: 3}
   opaqueAtmosphericScatteringShader: {fileID: 4800000, guid: 71fe614c0d0243c8a42d35634c7a5ed3,
     type: 3}
   defaultFogVolumeShader: {fileID: 4800000, guid: f50700829487ca549a331926e80fe525,
     type: 3}
+  lightShaftsShader: {fileID: 4800000, guid: 4bd61727c11040e293b620cc95623caa, type: 3}
