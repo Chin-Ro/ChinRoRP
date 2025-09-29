@@ -12,7 +12,7 @@ namespace UnityEngine.Rendering.Universal
     public class Fog : VolumeComponent
     {
         [Tooltip("开启雾效.")]
-        public BoolParameter enabled = new BoolParameter(false);
+        public BoolParameter enabled = new BoolParameter(false, true);
         
         public BoolParameter enableAtmosphereFog = new BoolParameter(false);
         public FloatParameter baseHeight = new FloatParameter(1000.0f);
@@ -22,11 +22,11 @@ namespace UnityEngine.Rendering.Universal
         [AdditionalProperty] public MinFloatParameter mipFogNear = new MinFloatParameter(0.0f, 0.0f);
         [AdditionalProperty] public MinFloatParameter mipFogFar = new MinFloatParameter(1000.0f, 0.0f);
         
-        public ClampedFloatParameter fogFirstDensity = new ClampedFloatParameter(0.02f, 0f, 0.05f);
-        public ClampedFloatParameter fogFirstHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f);
-        public ClampedFloatParameter fogSecondDensity = new ClampedFloatParameter(0f, 0f, 0.05f);
-        public ClampedFloatParameter fogSecondHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f);
-        public MinFloatParameter fogSecondHeight = new MinFloatParameter(0.0f, 0.0f);
+        public ClampedFloatParameter fogFirstDensity = new ClampedFloatParameter(0.02f, 0f, 0.05f, true);
+        public ClampedFloatParameter fogFirstHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f, true);
+        public ClampedFloatParameter fogSecondDensity = new ClampedFloatParameter(0f, 0f, 0.05f, true);
+        public ClampedFloatParameter fogSecondHeightFalloff = new ClampedFloatParameter(0.2f, 0.001f, 2f, true);
+        public MinFloatParameter fogSecondHeight = new MinFloatParameter(0.0f, 0.0f, true);
         public ColorParameter fogInscatteringColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
         public ClampedFloatParameter fogMaxOpacity = new ClampedFloatParameter(1f, 0f, 1f);
         [AdditionalProperty] public ClampedFloatParameter skyContributeFactor = new ClampedFloatParameter(1.0f, 0.0f, 1.0f);
@@ -34,12 +34,12 @@ namespace UnityEngine.Rendering.Universal
         public ClampedFloatParameter fogEndDistance = new ClampedFloatParameter(0f, 0f, 20000f);
         public ClampedFloatParameter fogCutoffDistance = new ClampedFloatParameter(0f, 0f, 200000);
         
-        public ClampedFloatParameter inScatterExponent = new ClampedFloatParameter(4f, 2f, 64f);
+        public ClampedFloatParameter inScatterExponent = new ClampedFloatParameter(4f, 2f, 64f, true);
         public MinFloatParameter inScatteringStartDistance = new MinFloatParameter(0.0f, 0.0f);
         public ColorParameter inScatterColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
         
-        public BoolParameter enableLightShafts = new BoolParameter(false);
-        public ClampedFloatParameter occlusionMaskDarkness = new ClampedFloatParameter(0.25f, 0.0f, 1.0f);
+        public BoolParameter enableLightShafts = new BoolParameter(false, true);
+        public ClampedFloatParameter occlusionMaskDarkness = new ClampedFloatParameter(0.25f, 0.0f, 1.0f, true);
         public MinFloatParameter occlusionDepthRange = new MinFloatParameter(300.0f, 0.0f);
         public BoolParameter lightShaftBloom = new BoolParameter(false);
         public ClampedFloatParameter bloomScale = new ClampedFloatParameter(0.2f, 0.0f, 10.0f);
@@ -47,11 +47,11 @@ namespace UnityEngine.Rendering.Universal
         public ClampedFloatParameter bloomMaxBrightness = new ClampedFloatParameter(100.0f, 0.0f, 100.0f);
         public ColorParameter bloomTint = new ColorParameter(Color.white);
         
-        public BoolParameter enableVolumetricFog = new BoolParameter(false);
+        public BoolParameter enableVolumetricFog = new BoolParameter(false, true);
         public ColorParameter albedo = new ColorParameter(Color.white);
         public ClampedFloatParameter extinctionScale = new ClampedFloatParameter(1.0f, 0.0f, 10.0f);
         public MinFloatParameter depthExtent = new MinFloatParameter(64.0f, 0.1f);
-        public ClampedFloatParameter anisotropy = new ClampedFloatParameter(0.0f, -1.0f, 1.0f);
+        public ClampedFloatParameter anisotropy = new ClampedFloatParameter(0.2f, -1.0f, 1.0f);
         
         // Limit parameters for the fog quality
         internal const float minFogScreenResolutionPercentage = (1.0f / 16.0f) * 100;

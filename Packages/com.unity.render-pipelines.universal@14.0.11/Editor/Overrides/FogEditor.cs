@@ -53,7 +53,7 @@ namespace UnityEditor.Rendering.Universal
         private SerializedDataParameter bloomMaxBrightness;
         private SerializedDataParameter bloomTint;
         
-        private bool _SecondFogDataExpand = false;
+        private bool _SecondFogDataExpand = true;
         
         private struct Style
         {
