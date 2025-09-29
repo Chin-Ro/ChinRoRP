@@ -53,7 +53,8 @@ namespace UnityEditor.Rendering.Universal
         private SerializedDataParameter bloomMaxBrightness;
         private SerializedDataParameter bloomTint;
         
-        private bool _SecondFogDataExpand = true;
+        private bool _DirectionalInscatteringExpand = true;
+        private bool _VolumetricFogExpand = true;
         
         private struct Style
         {
@@ -61,7 +62,6 @@ namespace UnityEditor.Rendering.Universal
             public static GUIContent meanFreePath = new GUIContent("Fog Attenuation Distance");
             public static GUIContent fogFirstDensity = new GUIContent("Fog Density");
             public static GUIContent fogFirstHeightFalloff = new GUIContent("Fog Height Falloff");
-            public static GUIContent secondFogExpand = new GUIContent("Second Fog Data");
             public static GUIContent fogStartDistance = new GUIContent("Start Distance");
             public static GUIContent fogEndDistance = new GUIContent("End Distance");
             public static GUIContent inScatterExponent = new GUIContent("Inscattering Exponent");
@@ -143,20 +143,13 @@ namespace UnityEditor.Rendering.Universal
                 {
                     PropertyField(fogFirstDensity, Style.fogFirstDensity);
                     PropertyField(fogFirstHeightFalloff,  Style.fogFirstHeightFalloff);
-                    using (new EditorGUILayout.VerticalScope("box"))
+                    using (new IndentLevelScope())
                     {
-                        EditorGUI.indentLevel++;
-                        _SecondFogDataExpand = EditorGUILayout.Foldout(_SecondFogDataExpand, Style.secondFogExpand, true);
-                        if (_SecondFogDataExpand)
-                        {
-                            EditorGUI.indentLevel--;
-                            PropertyField(fogSecondDensity);
-                            PropertyField(fogSecondHeightFalloff);
-                            PropertyField(fogSecondHeight);
-                            EditorGUI.indentLevel++;
-                        }
-                        EditorGUI.indentLevel--;
+                        PropertyField(fogSecondDensity);
+                        PropertyField(fogSecondHeightFalloff);
+                        PropertyField(fogSecondHeight);
                     }
+                    
                     PropertyField(fogInscatteringColor);
                     PropertyField(fogMaxOpacity);
                     PropertyField(skyContributeFactor);
@@ -164,24 +157,39 @@ namespace UnityEditor.Rendering.Universal
                     PropertyField(fogEndDistance, Style.fogEndDistance);
                     PropertyField(fogCutoffDistance);
                 }
-                EditorGUILayout.LabelField("Directional Inscattering");
-                using (new EditorGUILayout.VerticalScope("box"))
-                {
-                    PropertyField(inScatterExponent, Style.inScatterExponent);
-                    PropertyField(inScatteringStartDistance, Style.inScatteringStartDistance);
-                    PropertyField(inScatterColor, Style.inScatterColor);
-                }
                 
-                EditorGUILayout.LabelField("Volumetric Fog");
-                using (new EditorGUILayout.VerticalScope("box"))
+                EditorGUI.indentLevel++;
+                _DirectionalInscatteringExpand = EditorGUILayout.Foldout(_DirectionalInscatteringExpand, "Directional Inscattering");
+                if (_DirectionalInscatteringExpand)
                 {
-                    PropertyField(enableVolumetricFog, Style.enableVolumetricFog);
-                    PropertyField(albedo);
-                    PropertyField(extinctionScale);
-                    PropertyField(depthExtent, Style.depthExtent);
-                    PropertyField(anisotropy);
-                    PropertyField(directionalLightsOnly);
+                    EditorGUI.indentLevel--;
+                    using (new EditorGUILayout.VerticalScope("box"))
+                    {
+                        PropertyField(inScatterExponent, Style.inScatterExponent);
+                        PropertyField(inScatteringStartDistance, Style.inScatteringStartDistance);
+                        PropertyField(inScatterColor, Style.inScatterColor);
+                    }
+                    EditorGUI.indentLevel++;
                 }
+                EditorGUI.indentLevel--;
+                
+                EditorGUI.indentLevel++;
+                _VolumetricFogExpand = EditorGUILayout.Foldout(_VolumetricFogExpand, "Volumetric Fog");
+                if (_VolumetricFogExpand)
+                {
+                    EditorGUI.indentLevel--;
+                    using (new EditorGUILayout.VerticalScope("box"))
+                    {
+                        PropertyField(enableVolumetricFog, Style.enableVolumetricFog);
+                        PropertyField(albedo);
+                        PropertyField(extinctionScale);
+                        PropertyField(depthExtent, Style.depthExtent);
+                        PropertyField(anisotropy);
+                        PropertyField(directionalLightsOnly);
+                    }
+                    EditorGUI.indentLevel++;
+                }
+                EditorGUI.indentLevel--;
             }
             
             using (new EditorGUILayout.VerticalScope("frameBox"))
