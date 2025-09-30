@@ -40,15 +40,15 @@ namespace UnityEngine.Rendering.Universal
         public ColorParameter inScatterColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
         
         public BoolParameter enableLightShafts = new BoolParameter(false, true);
-        public ClampedFloatParameter occlusionMaskDarkness = new ClampedFloatParameter(0.25f, 0.0f, 1.0f);
+        public ClampedFloatParameter occlusionMaskDarkness = new ClampedFloatParameter(0.25f, 0.0f, 1.0f, true);
         public MinFloatParameter occlusionDepthRange = new MinFloatParameter(300.0f, 0.0f);
-        public BoolParameter lightShaftBloom = new BoolParameter(false);
+        public BoolParameter lightShaftBloom = new BoolParameter(false, true);
         public ClampedFloatParameter bloomScale = new ClampedFloatParameter(0.2f, 0.0f, 10.0f);
         public ClampedFloatParameter bloomThreshold = new ClampedFloatParameter(0.0f, 0.0f, 4.0f);
         public ClampedFloatParameter bloomMaxBrightness = new ClampedFloatParameter(100.0f, 0.0f, 100.0f);
         public ColorParameter bloomTint = new ColorParameter(Color.white);
         
-        public BoolParameter enableVolumetricFog = new BoolParameter(false);
+        public BoolParameter enableVolumetricFog = new BoolParameter(false, true);
         public ColorParameter albedo = new ColorParameter(Color.white);
         public ClampedFloatParameter extinctionScale = new ClampedFloatParameter(1.0f, 0.0f, 10.0f);
         public MinFloatParameter depthExtent = new MinFloatParameter(64.0f, 0.1f);

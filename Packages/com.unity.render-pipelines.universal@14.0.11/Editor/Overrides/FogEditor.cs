@@ -122,88 +122,103 @@ namespace UnityEditor.Rendering.Universal
         {
             PropertyField(enabled);
 
-            using (new EditorGUILayout.VerticalScope("frameBox"))
+            using (new EditorGUI.DisabledScope(!enabled.value.boolValue))
             {
-                PropertyField(enableAtmosphereFog, Style.enableAtmosphereFog);
-                using (new EditorGUILayout.VerticalScope("box"))
+                using (new EditorGUILayout.VerticalScope("frameBox"))
                 {
-                    PropertyField(meanFreePath, Style.meanFreePath);
-                    PropertyField(baseHeight);
-                    PropertyField(maximumHeight);
-                    PropertyField(mipFogMaxMip);
-                    PropertyField(mipFogNear);
-                    PropertyField(mipFogFar);
-                }
-            }
-            
-            using (new EditorGUILayout.VerticalScope("frameBox"))
-            {
-                EditorGUILayout.LabelField("Height Fog");
-                using (new EditorGUILayout.VerticalScope("box"))
-                {
-                    PropertyField(fogFirstDensity, Style.fogFirstDensity);
-                    PropertyField(fogFirstHeightFalloff,  Style.fogFirstHeightFalloff);
-                    using (new IndentLevelScope())
+                    PropertyField(enableAtmosphereFog, Style.enableAtmosphereFog);
+                    using (new EditorGUILayout.VerticalScope("box"))
                     {
-                        PropertyField(fogSecondDensity);
-                        PropertyField(fogSecondHeightFalloff);
-                        PropertyField(fogSecondHeight);
+                        using (new EditorGUI.DisabledScope(!enableAtmosphereFog.value.boolValue))
+                        {
+                            PropertyField(meanFreePath, Style.meanFreePath);
+                            PropertyField(baseHeight);
+                            PropertyField(maximumHeight);
+                            PropertyField(mipFogMaxMip);
+                            PropertyField(mipFogNear);
+                            PropertyField(mipFogFar);
+                        }
+                    }
+                }
+                
+                using (new EditorGUILayout.VerticalScope("frameBox"))
+                {
+                    EditorGUILayout.LabelField("Height Fog");
+                    using (new EditorGUILayout.VerticalScope("box"))
+                    {
+                        PropertyField(fogFirstDensity, Style.fogFirstDensity);
+                        PropertyField(fogFirstHeightFalloff,  Style.fogFirstHeightFalloff);
+                        using (new IndentLevelScope())
+                        {
+                            PropertyField(fogSecondDensity);
+                            PropertyField(fogSecondHeightFalloff);
+                            PropertyField(fogSecondHeight);
+                        }
+                        
+                        PropertyField(fogInscatteringColor);
+                        PropertyField(fogMaxOpacity);
+                        PropertyField(skyContributeFactor);
+                        PropertyField(fogStartDistance, Style.fogStartDistance);
+                        PropertyField(fogEndDistance, Style.fogEndDistance);
+                        PropertyField(fogCutoffDistance);
                     }
                     
-                    PropertyField(fogInscatteringColor);
-                    PropertyField(fogMaxOpacity);
-                    PropertyField(skyContributeFactor);
-                    PropertyField(fogStartDistance, Style.fogStartDistance);
-                    PropertyField(fogEndDistance, Style.fogEndDistance);
-                    PropertyField(fogCutoffDistance);
+                    EditorGUI.indentLevel++;
+                    _DirectionalInscatteringExpand = EditorGUILayout.Foldout(_DirectionalInscatteringExpand, "Directional Inscattering");
+                    if (_DirectionalInscatteringExpand)
+                    {
+                        EditorGUI.indentLevel--;
+                        using (new EditorGUILayout.VerticalScope("box"))
+                        {
+                            PropertyField(inScatterExponent, Style.inScatterExponent);
+                            PropertyField(inScatteringStartDistance, Style.inScatteringStartDistance);
+                            PropertyField(inScatterColor, Style.inScatterColor);
+                        }
+                        EditorGUI.indentLevel++;
+                    }
+                    EditorGUI.indentLevel--;
+                    
+                    EditorGUI.indentLevel++;
+                    _VolumetricFogExpand = EditorGUILayout.Foldout(_VolumetricFogExpand, "Volumetric Fog");
+                    if (_VolumetricFogExpand)
+                    {
+                        EditorGUI.indentLevel--;
+                        using (new EditorGUILayout.VerticalScope("box"))
+                        {
+                            PropertyField(enableVolumetricFog, Style.enableVolumetricFog);
+                            using (new EditorGUI.DisabledScope(!enableVolumetricFog.value.boolValue))
+                            {
+                                PropertyField(albedo);
+                                PropertyField(extinctionScale);
+                                PropertyField(depthExtent, Style.depthExtent);
+                                PropertyField(anisotropy);
+                                PropertyField(directionalLightsOnly);
+                            }
+                        }
+                        EditorGUI.indentLevel++;
+                    }
+                    EditorGUI.indentLevel--;
                 }
                 
-                EditorGUI.indentLevel++;
-                _DirectionalInscatteringExpand = EditorGUILayout.Foldout(_DirectionalInscatteringExpand, "Directional Inscattering");
-                if (_DirectionalInscatteringExpand)
+                using (new EditorGUILayout.VerticalScope("frameBox"))
                 {
-                    EditorGUI.indentLevel--;
+                    PropertyField(enableLightShafts, Style.enableLightShafts);
                     using (new EditorGUILayout.VerticalScope("box"))
                     {
-                        PropertyField(inScatterExponent, Style.inScatterExponent);
-                        PropertyField(inScatteringStartDistance, Style.inScatteringStartDistance);
-                        PropertyField(inScatterColor, Style.inScatterColor);
+                        using (new EditorGUI.DisabledScope(!enableLightShafts.value.boolValue))
+                        {
+                            PropertyField(occlusionMaskDarkness);
+                            PropertyField(occlusionDepthRange);
+                            PropertyField(lightShaftBloom);
+                            using (new EditorGUI.DisabledScope(!lightShaftBloom.value.boolValue))
+                            {
+                                PropertyField(bloomScale);
+                                PropertyField(bloomThreshold);
+                                PropertyField(bloomMaxBrightness);
+                                PropertyField(bloomTint);
+                            }
+                        }
                     }
-                    EditorGUI.indentLevel++;
-                }
-                EditorGUI.indentLevel--;
-                
-                EditorGUI.indentLevel++;
-                _VolumetricFogExpand = EditorGUILayout.Foldout(_VolumetricFogExpand, "Volumetric Fog");
-                if (_VolumetricFogExpand)
-                {
-                    EditorGUI.indentLevel--;
-                    using (new EditorGUILayout.VerticalScope("box"))
-                    {
-                        PropertyField(enableVolumetricFog, Style.enableVolumetricFog);
-                        PropertyField(albedo);
-                        PropertyField(extinctionScale);
-                        PropertyField(depthExtent, Style.depthExtent);
-                        PropertyField(anisotropy);
-                        PropertyField(directionalLightsOnly);
-                    }
-                    EditorGUI.indentLevel++;
-                }
-                EditorGUI.indentLevel--;
-            }
-            
-            using (new EditorGUILayout.VerticalScope("frameBox"))
-            {
-                PropertyField(enableLightShafts, Style.enableLightShafts);
-                using (new EditorGUILayout.VerticalScope("box"))
-                {
-                    PropertyField(occlusionMaskDarkness);
-                    PropertyField(occlusionDepthRange);
-                    PropertyField(lightShaftBloom);
-                    PropertyField(bloomScale);
-                    PropertyField(bloomThreshold);
-                    PropertyField(bloomMaxBrightness);
-                    PropertyField(bloomTint);
                 }
             }
         }

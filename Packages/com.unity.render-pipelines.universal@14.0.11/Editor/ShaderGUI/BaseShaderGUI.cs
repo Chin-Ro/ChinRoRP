@@ -1007,6 +1007,7 @@ namespace UnityEditor
 
                     CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAPREMULTIPLY_ON, preserveSpecular);
                     CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAADDITIVE_ON, blendMode == BlendMode.Additive);
+                    if (blendMode == BlendMode.Additive) CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAPREMULTIPLY_ON, false);
                     CoreUtils.SetKeyword(material, ShaderKeywordStrings._ALPHAMODULATE_ON, blendMode == BlendMode.Multiply);
 
                     // General Transparent Material Settings

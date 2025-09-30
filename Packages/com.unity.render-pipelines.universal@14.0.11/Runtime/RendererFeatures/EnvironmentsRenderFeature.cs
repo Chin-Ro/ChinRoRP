@@ -160,17 +160,20 @@ namespace UnityEngine.Rendering.Universal
                     if (cameraData.volumetricHistoryBuffers == null)
                     {
                         VolumetricLightingUtils.CreateVolumetricHistoryBuffers(cameraData, 2);
+                        cameraData.isFirstFrame = false;
                     }
                 }
                 else
                 {
                     VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(cameraData);
+                    cameraData.isFirstFrame = true;
                 }
                 VolumetricLightingUtils.ResizeVolumetricHistoryBuffers(cameraData, vBufferParams);
             }
             else
             {
                 VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(cameraData);
+                cameraData.isFirstFrame = true;
             }
         }
 

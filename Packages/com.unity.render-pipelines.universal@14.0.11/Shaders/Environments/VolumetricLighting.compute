@@ -345,9 +345,8 @@ LIGHT_LOOP_BEGIN(visibleLightCount)
         lighting.radianceComplete += (weight * lightColor.rgb) * phase;
     }
 LIGHT_LOOP_END
-    
-    return lighting;
 #endif
+    return lighting;
 }
 
 // Computes the in-scattered radiance along the ray.

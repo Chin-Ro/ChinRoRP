@@ -203,7 +203,7 @@ namespace UnityEngine.Rendering.Universal
         static Dictionary<Camera, CameraData> s_Cameras = new Dictionary<Camera, CameraData>(); 
         static List<Camera> s_Cleanup = new List<Camera>();
 
-        internal bool isFirstFrame;
+        internal bool isFirstFrame = true;
         
         public static CameraData GetOrCreate(Camera camera)
         {
