@@ -74,7 +74,7 @@ namespace UnityEngine.Rendering.Universal
         GraphicsBuffer m_VolumetricMaterialIndexBuffer = null;
         Material m_DefaultVolumetricFogMaterial = null;
         
-        private ShaderVariablesEnvironments m_ShaderVariablesEnvironment;
+        private ShaderVariablesEnvironments m_ShaderVariablesEnvironments;
         private ShaderVariablesVolumetric m_ShaderVariablesVolumetric;
         public static int frameIndex => _frameIndex;
         private static int _frameIndex;
@@ -129,7 +129,7 @@ namespace UnityEngine.Rendering.Universal
                 m_LightShaftsBloomPass ??= new LightShaftsBloomPass(RenderPassEvent.BeforeRenderingPostProcessing, environmentsData);
             }
 
-            m_ShaderVariablesEnvironment = new ShaderVariablesEnvironments();
+            m_ShaderVariablesEnvironments = new ShaderVariablesEnvironments();
             m_OpaqueAtmosphereScatteringPass ??= new OpaqueAtmosphereScatteringPass(RenderPassEvent.AfterRenderingSkybox, environmentsData);
         }
 
@@ -150,131 +150,143 @@ namespace UnityEngine.Rendering.Universal
                 VolumetricLightingUtils.UpdateVolumetricBufferParams(cameraData, ref vBufferParams, ref s_CurrentVolumetricBufferSize);
             }
             
-            bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(cameraData);
-            if (enableVolumetricFog)
+            bool enableFog = Fog.IsFogEnabled(cameraData);
+            if (enableFog)
             {
-                bool isVolumetricHistoryRequired = Fog.IsVolumetricReprojectionEnabled(cameraData);
-                // Handle the volumetric fog buffers
-                if (isVolumetricHistoryRequired)
+                bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(cameraData);
+                if (enableVolumetricFog)
                 {
-                    if (cameraData.volumetricHistoryBuffers == null)
+                    bool isVolumetricHistoryRequired = Fog.IsVolumetricReprojectionEnabled(cameraData);
+                    // Handle the volumetric fog buffers
+                    if (isVolumetricHistoryRequired)
                     {
-                        VolumetricLightingUtils.CreateVolumetricHistoryBuffers(cameraData, 2);
-                        cameraData.isFirstFrame = false;
+                        if (cameraData.volumetricHistoryBuffers == null)
+                        {
+                            VolumetricLightingUtils.CreateVolumetricHistoryBuffers(cameraData, 2);
+                            cameraData.isFirstFrame = false;
+                        }
                     }
+                    else
+                    {
+                        VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(cameraData);
+                        cameraData.isFirstFrame = true;
+                    }
+                    VolumetricLightingUtils.ResizeVolumetricHistoryBuffers(cameraData, vBufferParams);
                 }
                 else
                 {
                     VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(cameraData);
                     cameraData.isFirstFrame = true;
                 }
-                VolumetricLightingUtils.ResizeVolumetricHistoryBuffers(cameraData, vBufferParams);
-            }
-            else
-            {
-                VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(cameraData);
-                cameraData.isFirstFrame = true;
             }
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(renderingData.cameraData);
-            if (enableVolumetricFog)
-            {
-                renderer.EnqueuePass(m_GenerateMaxZPass);
-                renderer.EnqueuePass(m_ClearAndHeightFogVoxelizationPass);
-                renderer.EnqueuePass(m_FogVolumeVoxelizationPass);
-                renderer.EnqueuePass(m_VolumetricLightingPass);
-            }
-
-            bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
-            if (enableLightShafts)
-            {
-                renderer.EnqueuePass(m_LightShaftsPass);
-            }
+            bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
             
-            renderer.EnqueuePass(m_OpaqueAtmosphereScatteringPass);
-
-            bool enableLightShaftsBloom = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData);
-            if (enableLightShaftsBloom)
+            if (enableFog)
             {
-                renderer.EnqueuePass(m_LightShaftsBloomPass);
+                bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(renderingData.cameraData);
+                if (enableVolumetricFog)
+                {
+                    renderer.EnqueuePass(m_GenerateMaxZPass);
+                    renderer.EnqueuePass(m_ClearAndHeightFogVoxelizationPass);
+                    renderer.EnqueuePass(m_FogVolumeVoxelizationPass);
+                    renderer.EnqueuePass(m_VolumetricLightingPass);
+                }
+
+                bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
+                if (enableLightShafts)
+                {
+                    renderer.EnqueuePass(m_LightShaftsPass);
+                }
+            
+                renderer.EnqueuePass(m_OpaqueAtmosphereScatteringPass);
+
+                bool enableLightShaftsBloom = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData);
+                if (enableLightShaftsBloom)
+                {
+                    renderer.EnqueuePass(m_LightShaftsBloomPass);
+                }
             }
         }
 
         public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
         {
+            bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
             bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(renderingData.cameraData);
             bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
             
-            EnvironmentsUtils.UpdateShaderVariablesEnvironmentsCB(ref m_ShaderVariablesEnvironment, renderingData, vBufferParams, s_CurrentVolumetricBufferSize, enableLightShafts, enableVolumetricFog);
+            EnvironmentsUtils.UpdateShaderVariablesEnvironmentsCB(ref m_ShaderVariablesEnvironments, renderingData, vBufferParams, s_CurrentVolumetricBufferSize, enableLightShafts, enableVolumetricFog);
+            ConstantBuffer.PushGlobal(renderingData.commandBuffer, m_ShaderVariablesEnvironments, EnvironmentConstants._ShaderVariablesEnvironments);
             
-            if (enableVolumetricFog)
+            if (enableFog)
             {
-                // Frustum cull Local Volumetric Fog on the CPU. Can be performed as soon as the camera is set up.
-                PrepareVisibleLocalVolumetricFogList(renderingData.cameraData, renderingData.commandBuffer);
+                if (enableVolumetricFog)
+                {
+                    // Frustum cull Local Volumetric Fog on the CPU. Can be performed as soon as the camera is set up.
+                    PrepareVisibleLocalVolumetricFogList(renderingData.cameraData, renderingData.commandBuffer);
 
-                descriptor.width = (int)(renderingData.cameraData.scaledWidth / 16.0f);
-                descriptor.height = (int)(renderingData.cameraData.scaledHeight / 16.0f);
-                descriptor.graphicsFormat = GraphicsFormat.R32_SFloat;
-                descriptor.dimension = TextureDimension.Tex2D;
-                descriptor.enableRandomWrite = true;
-                descriptor.msaaSamples = 1;
-                RenderingUtils.ReAllocateIfNeeded(ref m_MaxZMask, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Dilated MaxZ mask");
-                
-                RenderPassEvent volumetricPassEvent = RenderPassEvent.AfterRenderingOpaques;
-                bool isRendererDeferred = renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
-                if (isRendererDeferred) volumetricPassEvent = RenderPassEvent.AfterRenderingGbuffer;
-                
-                m_GenerateMaxZPass.Setup(ref m_MaxZMask, volumetricPassEvent, isRendererDeferred, vBufferParams);
-                
-                descriptor.width = s_CurrentVolumetricBufferSize.x;
-                descriptor.height = s_CurrentVolumetricBufferSize.y;
-                descriptor.volumeDepth = s_CurrentVolumetricBufferSize.z;
-                descriptor.dimension = TextureDimension.Tex3D;
-                descriptor.graphicsFormat = GraphicsFormat.R16G16B16A16_SFloat;
-                descriptor.enableRandomWrite = true;
-                RenderingUtils.ReAllocateIfNeeded(ref m_VolumetricDensityBuffer, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Volumetric Density");
-                
-                var currIdx = (frameIndex + 0) & 1;
-                var currParams = vBufferParams[currIdx];
-                var cvp = currParams.viewportSize;
-                var resolution = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
-                VolumetricLightingUtils.UpdateShaderVariableslVolumetrics(ref m_ShaderVariablesVolumetric, renderingData.cameraData, resolution,
-                    m_VisibleLocalVolumetricFogVolumes.Count, vBufferParams);
-                
-                m_ClearAndHeightFogVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, vBufferParams, m_ShaderVariablesVolumetric);
+                    descriptor.width = (int)(renderingData.cameraData.scaledWidth / 16.0f);
+                    descriptor.height = (int)(renderingData.cameraData.scaledHeight / 16.0f);
+                    descriptor.graphicsFormat = GraphicsFormat.R32_SFloat;
+                    descriptor.dimension = TextureDimension.Tex2D;
+                    descriptor.enableRandomWrite = true;
+                    descriptor.msaaSamples = 1;
+                    RenderingUtils.ReAllocateIfNeeded(ref m_MaxZMask, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Dilated MaxZ mask");
+                    
+                    RenderPassEvent volumetricPassEvent = RenderPassEvent.AfterRenderingOpaques;
+                    bool isRendererDeferred = renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
+                    if (isRendererDeferred) volumetricPassEvent = RenderPassEvent.AfterRenderingGbuffer;
+                    
+                    m_GenerateMaxZPass.Setup(ref m_MaxZMask, volumetricPassEvent, isRendererDeferred, vBufferParams);
+                    
+                    descriptor.width = s_CurrentVolumetricBufferSize.x;
+                    descriptor.height = s_CurrentVolumetricBufferSize.y;
+                    descriptor.volumeDepth = s_CurrentVolumetricBufferSize.z;
+                    descriptor.dimension = TextureDimension.Tex3D;
+                    descriptor.graphicsFormat = GraphicsFormat.R16G16B16A16_SFloat;
+                    descriptor.enableRandomWrite = true;
+                    RenderingUtils.ReAllocateIfNeeded(ref m_VolumetricDensityBuffer, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Volumetric Density");
+                    
+                    var currIdx = (frameIndex + 0) & 1;
+                    var currParams = vBufferParams[currIdx];
+                    var cvp = currParams.viewportSize;
+                    var resolution = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
+                    VolumetricLightingUtils.UpdateShaderVariableslVolumetrics(ref m_ShaderVariablesVolumetric, renderingData.cameraData, resolution,
+                        m_VisibleLocalVolumetricFogVolumes.Count, vBufferParams);
+                    
+                    m_ClearAndHeightFogVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, vBufferParams, m_ShaderVariablesVolumetric);
 
-                m_FogVolumeVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, m_VisibleLocalVolumetricFogVolumes,
-                    maxLocalVolumetricFogOnScreen, vBufferParams, m_VisibleVolumeBoundsBuffer, m_VolumetricMaterialDataBuffer, m_DefaultVolumetricFogMaterial,
-                    m_VisibleVolumeData, m_VisibleVolumeBounds, m_VolumetricMaterialIndexBuffer, m_VolumetricFogSortKeys);
+                    m_FogVolumeVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, m_VisibleLocalVolumetricFogVolumes,
+                        maxLocalVolumetricFogOnScreen, vBufferParams, m_VisibleVolumeBoundsBuffer, m_VolumetricMaterialDataBuffer, m_DefaultVolumetricFogMaterial,
+                        m_VisibleVolumeData, m_VisibleVolumeBounds, m_VolumetricMaterialIndexBuffer, m_VolumetricFogSortKeys);
 
-                RenderingUtils.ReAllocateIfNeeded(ref m_VolumetricLighting, descriptor,  FilterMode.Bilinear, TextureWrapMode.Clamp, name: "VBufferLighting");
+                    RenderingUtils.ReAllocateIfNeeded(ref m_VolumetricLighting, descriptor,  FilterMode.Bilinear, TextureWrapMode.Clamp, name: "VBufferLighting");
 
-                m_VolumetricLightingPass.Setup(ref m_VolumetricLighting, m_VolumetricDensityBuffer, m_MaxZMask, volumetricPassEvent, vBufferParams,
-                    m_ShaderVariablesVolumetric);
-            }
+                    m_VolumetricLightingPass.Setup(ref m_VolumetricLighting, m_VolumetricDensityBuffer, m_MaxZMask, volumetricPassEvent, vBufferParams,
+                        m_ShaderVariablesVolumetric);
+                }
 
-            if (enableLightShafts)
-            {
-                descriptor.width = Mathf.Max(1, renderingData.cameraData.scaledWidth >> (int)lightShaftsDownsample);
-                descriptor.height = Mathf.Max(1, renderingData.cameraData.scaledHeight >> (int)lightShaftsDownsample);
-                descriptor.volumeDepth = 1;
-                descriptor.dimension = TextureDimension.Tex2D;
-                descriptor.graphicsFormat = GraphicsFormat.R8_UNorm;
-                descriptor.enableRandomWrite = false;
-                descriptor.msaaSamples = 1;
+                if (enableLightShafts)
+                {
+                    descriptor.width = Mathf.Max(1, renderingData.cameraData.scaledWidth >> (int)lightShaftsDownsample);
+                    descriptor.height = Mathf.Max(1, renderingData.cameraData.scaledHeight >> (int)lightShaftsDownsample);
+                    descriptor.volumeDepth = 1;
+                    descriptor.dimension = TextureDimension.Tex2D;
+                    descriptor.graphicsFormat = GraphicsFormat.R8_UNorm;
+                    descriptor.enableRandomWrite = false;
+                    descriptor.msaaSamples = 1;
+                    
+                    m_LightShaftsPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
+                }
                 
-                m_LightShaftsPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
-            }
-            
-            m_OpaqueAtmosphereScatteringPass.Setup(m_ShaderVariablesEnvironment);
-            
-            if (enableLightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData))
-            {
-                descriptor.graphicsFormat = renderingData.cameraData.renderer.cameraColorTargetHandle.rt.graphicsFormat;
-                m_LightShaftsBloomPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
+                if (enableLightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData))
+                {
+                    descriptor.graphicsFormat = renderingData.cameraData.renderer.cameraColorTargetHandle.rt.graphicsFormat;
+                    m_LightShaftsBloomPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
+                }
             }
         }
 

@@ -8,22 +8,11 @@ namespace UnityEngine.Rendering.Universal
 {
     public class OpaqueAtmosphereScatteringPass : ScriptableRenderPass
     {
-        private ShaderVariablesEnvironments m_ShaderVariablesEnvironments;
         private Material m_Material;
         public OpaqueAtmosphereScatteringPass(RenderPassEvent passEvent, EnvironmentsData data)
         {
             renderPassEvent = passEvent;
             m_Material = Load(data.opaqueAtmosphericScatteringShader); 
-        }
-
-        internal void Setup(in ShaderVariablesEnvironments shaderVariables)
-        {
-            m_ShaderVariablesEnvironments = shaderVariables;
-        }
-
-        public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
-        {
-            ConstantBuffer.PushGlobal(cmd, m_ShaderVariablesEnvironments, EnvironmentConstants._ShaderVariablesEnvironments);
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
