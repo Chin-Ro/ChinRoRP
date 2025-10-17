@@ -1794,9 +1794,6 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="lights">List of lights to iterate.</param>
         /// <param name="lightIndex">The index of the light.</param>
         /// <param name="lightPos">The position of the light.</param>
-        /// <param name="lightForward">The forward direction of the light.</param>
-        /// <param name="lightUp">The up direction of the light.</param>
-        /// <param name="lightRight">The right direction of the light.</param>
         /// <param name="lightColor">The color of the light.</param>
         /// <param name="lightAttenuation">The attenuation of the light.</param>
         /// <param name="lightSpotDir">The direction of the light.</param>

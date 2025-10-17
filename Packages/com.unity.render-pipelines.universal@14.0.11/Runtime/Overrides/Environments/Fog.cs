@@ -104,7 +104,7 @@ namespace UnityEngine.Rendering.Universal
             // We only enable volumetric re projection if we are processing the game view or a scene view with animated materials on
             bool b = cameraData.cameraType == CameraType.Game || (cameraData.cameraType == CameraType.SceneView && CoreUtils.AreAnimatedMaterialsEnabled(cameraData.camera));
 
-            bool c = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Reprojection) != 0;
+            bool c = ((int)EnvironmentsRendererFeature.m_DenoisingMode & (int)FogDenoisingMode.Reprojection) != 0;
             
             return a && b && c;
         }
@@ -156,7 +156,7 @@ namespace UnityEngine.Rendering.Universal
             float H = VolumetricLightingUtils.ScaleHeightFromLayerDepth(layerDepth);
             cb._HeightFogExponents = new Vector4(1.0f / H, H, data.extinction, crBaseHeight);
             cb._GlobalFogParam1 = new Vector4(anisotropy.value, skyContributeFactor.value, extinctionScale.value, _FogEnabled);
-            int _VolumetricFilteringEnabled = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0 ? 1 : 0;
+            int _VolumetricFilteringEnabled = ((int)EnvironmentsRendererFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0 ? 1 : 0;
             int _FogDirectionalOnly = directionalLightsOnly.value ? 1 : 0;
             cb._GlobalFogParam2 = new Vector4(_EnableLightShafts, _EnableVolumetricFog, _VolumetricFilteringEnabled, _FogDirectionalOnly);
         }

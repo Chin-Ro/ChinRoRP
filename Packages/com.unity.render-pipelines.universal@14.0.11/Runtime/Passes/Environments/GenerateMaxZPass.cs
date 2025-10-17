@@ -32,6 +32,7 @@ namespace UnityEngine.Rendering.Universal
         
         public GenerateMaxZPass(EnvironmentsData data)
         {
+            ConfigureInput(ScriptableRenderPassInput.Depth);
             passData = new GenerateMaxZMaskPassData
             {
                 generateMaxZCS = data.generateMaxZCS,
@@ -65,7 +66,7 @@ namespace UnityEngine.Rendering.Universal
             passData.finalMaskSize.x = passData.intermediateMaskSize.x / 2;
             passData.finalMaskSize.y = passData.intermediateMaskSize.y / 2;
 
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = frameIndex & 1;
             
             if (vBufferParameters != null)

@@ -9,8 +9,8 @@ using UnityEngine.Rendering.Universal;
 
 namespace UnityEditor.Rendering.Universal
 {
-    [CustomEditor(typeof(EnvironmentsRenderFeature))]
-    internal class EnvironmentsRenderFeatureEditor : Editor
+    [CustomEditor(typeof(EnvironmentsRendererFeature))]
+    internal class EnvironmentsRendererFeatureEditor : Editor
     {
         private SerializedProperty lightShafts;
         private SerializedProperty lightShaftsDownsample;

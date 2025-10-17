@@ -17,18 +17,18 @@ namespace UnityEngine.Rendering.Universal
     {
         internal static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
         {
-            if (EnvironmentsRenderFeature.m_FogControl == FogControl.Balance)
+            if (EnvironmentsRendererFeature.m_FogControl == FogControl.Balance)
             {
                 // Evaluate the ssFraction and sliceCount based on the control parameters
-                float maxScreenSpaceFraction = (1.0f - EnvironmentsRenderFeature.m_ResolutionDepthRatio) * (Fog.maxFogScreenResolutionPercentage - Fog.minFogScreenResolutionPercentage) + Fog.minFogScreenResolutionPercentage;
-                screenFraction = Mathf.Lerp(Fog.minFogScreenResolutionPercentage, maxScreenSpaceFraction, EnvironmentsRenderFeature.m_FolumetricFogBudget) * 0.01f;
-                float maxSliceCount = Mathf.Max(1.0f, EnvironmentsRenderFeature.m_ResolutionDepthRatio * Fog.maxFogSliceCount);
-                sliceCount = (int)Mathf.Lerp(1.0f, maxSliceCount, EnvironmentsRenderFeature.m_FolumetricFogBudget);
+                float maxScreenSpaceFraction = (1.0f - EnvironmentsRendererFeature.m_ResolutionDepthRatio) * (Fog.maxFogScreenResolutionPercentage - Fog.minFogScreenResolutionPercentage) + Fog.minFogScreenResolutionPercentage;
+                screenFraction = Mathf.Lerp(Fog.minFogScreenResolutionPercentage, maxScreenSpaceFraction, EnvironmentsRendererFeature.m_FolumetricFogBudget) * 0.01f;
+                float maxSliceCount = Mathf.Max(1.0f, EnvironmentsRendererFeature.m_ResolutionDepthRatio * Fog.maxFogSliceCount);
+                sliceCount = (int)Mathf.Lerp(1.0f, maxSliceCount, EnvironmentsRendererFeature.m_FolumetricFogBudget);
             }
             else
             {
-                screenFraction = EnvironmentsRenderFeature.m_ScreenResolutionPercentage * 0.01f;
-                sliceCount = EnvironmentsRenderFeature.m_VolumeSliceCount;
+                screenFraction = EnvironmentsRendererFeature.m_ScreenResolutionPercentage * 0.01f;
+                sliceCount = EnvironmentsRendererFeature.m_VolumeSliceCount;
             }
         }
 
@@ -41,14 +41,14 @@ namespace UnityEngine.Rendering.Universal
             int viewportHeight = universalCamera.scaledHeight;
 
             ComputeVolumetricFogSliceCountAndScreenFraction(controller, out var sliceCount, out var screenFraction);
-            if (EnvironmentsRenderFeature.m_FogControl == FogControl.Balance)
+            if (EnvironmentsRendererFeature.m_FogControl == FogControl.Balance)
             {
                 // Evaluate the voxel size
                 voxelSize = 1.0f / screenFraction;
             }
             else
             {
-                if (EnvironmentsRenderFeature.m_ScreenResolutionPercentage == Fog.optimalFogScreenResolutionPercentage)
+                if (EnvironmentsRendererFeature.m_ScreenResolutionPercentage == Fog.optimalFogScreenResolutionPercentage)
                     voxelSize = 8;
                 else
                     voxelSize = 1.0f / screenFraction; // Does not account for rounding (same function, above)
@@ -73,7 +73,7 @@ namespace UnityEngine.Rendering.Universal
                 universalCamera.camera.nearClipPlane,
                 universalCamera.camera.farClipPlane,
                 universalCamera.camera.fieldOfView,
-                EnvironmentsRenderFeature.m_SliceDistributionUniformity,
+                EnvironmentsRendererFeature.m_SliceDistributionUniformity,
                 voxelSize);
         }
         
@@ -89,7 +89,7 @@ namespace UnityEngine.Rendering.Universal
 
             var currentParams = ComputeVolumetricBufferParameters(universalCamera);
 
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var prevIdx = (frameIndex + 1) & 1;
 
@@ -208,7 +208,7 @@ namespace UnityEngine.Rendering.Universal
         {
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             var vFoV = universalCamera.camera.GetGateFittedFieldOfView() * Mathf.Deg2Rad;
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             
             Matrix4x4 projMax = GL.GetGPUProjectionMatrix(universalCamera.camera.projectionMatrix, true);
             var gpuAspect = ProjectionMatrixAspect(projMax);
@@ -219,7 +219,7 @@ namespace UnityEngine.Rendering.Universal
             cb._VBufferHistoryIsValid = universalCamera.volumetricHistoryIsValid ? 1u : 0u;
 
             GetHexagonalClosePackedSpheres7(m_xySeq);
-            int sampleIndex = EnvironmentsRenderFeature.frameIndex % 7;
+            int sampleIndex = EnvironmentsRendererFeature.frameIndex % 7;
             Vector4 xySeqOffset = new Vector4();
             // TODO: should we somehow reorder offsets in Z based on the offset in XY? S.t. the samples more evenly cover the domain.
             // Currently, we assume that they are completely uncorrelated, but maybe we should correlate them somehow.
@@ -281,7 +281,7 @@ namespace UnityEngine.Rendering.Universal
             Debug.Assert(vBufferParams.Length == 2);
             Debug.Assert(universalCamera.volumetricHistoryBuffers != null);
 
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var prevIdx = (frameIndex + 1) & 1;
 

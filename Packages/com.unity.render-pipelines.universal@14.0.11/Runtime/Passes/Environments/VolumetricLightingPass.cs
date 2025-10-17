@@ -55,7 +55,7 @@ namespace UnityEngine.Rendering.Universal
         {
             if (!Fog.IsVolumetricFogEnabled(renderingData.cameraData)) return;
             
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var prevIdx = (frameIndex + 1) & 1;
 
@@ -82,7 +82,7 @@ namespace UnityEngine.Rendering.Universal
             
             passData.resolution = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
             passData.viewCount = 1;
-            passData.filterVolume = ((int)EnvironmentsRenderFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0;
+            passData.filterVolume = ((int)EnvironmentsRendererFeature.m_DenoisingMode & (int)FogDenoisingMode.Gaussian) != 0;
             passData.sliceCount = (int)(cvp.z);
 
             if (passData.enableReprojection)

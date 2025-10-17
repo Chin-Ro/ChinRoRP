@@ -23,6 +23,7 @@ namespace UnityEditor.Rendering.Universal
         public SerializedProperty softShadowQualityProp { get; }                     // Per light soft shadow filtering quality.
         public SerializedProperty lightCookieSizeProp { get; }                       // Multi dimensional light cookie size replacing `cookieSize` in legacy light.
         public SerializedProperty lightCookieOffsetProp { get; }                     // Multi dimensional light cookie offset.
+        public SerializedProperty useContactShadowsProp { get; }
 
         // Volumetric
         public SerializedProperty useVolumetricProp { get; }
@@ -71,6 +72,7 @@ namespace UnityEditor.Rendering.Universal
             softShadowQualityProp = serializedAdditionalDataObject.FindProperty("m_SoftShadowQuality");
             lightCookieSizeProp = serializedAdditionalDataObject.FindProperty("m_LightCookieSize");
             lightCookieOffsetProp = serializedAdditionalDataObject.FindProperty("m_LightCookieOffset");
+            useContactShadowsProp = serializedAdditionalDataObject.FindProperty("m_UseContactShadow");
 
             renderingLayers = serializedAdditionalDataObject.FindProperty("m_RenderingLayers");
             customShadowLayers = serializedAdditionalDataObject.FindProperty("m_CustomShadowLayers");

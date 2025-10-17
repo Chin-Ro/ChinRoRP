@@ -70,6 +70,8 @@ namespace UnityEngine.Rendering.Universal.Internal
         float m_ZBinOffset;
         int m_LightCount;
         int m_BinCount;
+        
+        private int m_ContactShadowIndex = 0;
 
         internal struct InitParams
         {
@@ -499,6 +501,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             // Universal pipeline also supports only a single shadow light, if available it will be the main light.
             SetupMainLightConstants(cmd, ref renderingData.lightData);
             SetupAdditionalLightConstants(cmd, ref renderingData);
+            
+            m_ContactShadowIndex = 0;
         }
 
         void SetupMainLightConstants(CommandBuffer cmd, ref LightData lightData)

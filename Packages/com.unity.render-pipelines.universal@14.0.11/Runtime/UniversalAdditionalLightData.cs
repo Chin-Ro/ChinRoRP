@@ -302,6 +302,11 @@ namespace UnityEngine.Rendering.Universal
                 m_VolumetricShadowDimmer = Mathf.Clamp01(value);
             }
         }
+
+        [SerializeField] 
+        private bool m_UseContactShadow = true;
+
+        public bool useContactShadow => m_UseContactShadow;
         
         /// <inheritdoc/>
         public void OnBeforeSerialize()

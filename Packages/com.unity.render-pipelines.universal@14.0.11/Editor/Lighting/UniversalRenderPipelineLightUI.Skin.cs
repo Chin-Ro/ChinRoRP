@@ -30,6 +30,7 @@ namespace UnityEditor.Rendering.Universal
             public static readonly GUIContent ShadowNormalBias = EditorGUIUtility.TrTextContent("Normal", "Determines the bias this Light applies along the normal of surfaces it illuminates. This is ignored for point lights.");
             public static readonly GUIContent ShadowDepthBias = EditorGUIUtility.TrTextContent("Depth", "Determines the bias at which shadows are pushed away from the shadow-casting Game Object along the line from the Light.");
             public static readonly GUIContent ShadowInfo = EditorGUIUtility.TrTextContent("Unity might reduce the Light's shadow resolution to ensure that shadow maps fit in the shadow atlas. Consider this when selecting the the size of the shadow atlas, the shadow resolution of Lights, the number of Lights in your scene and whether you use soft shadows.");
+            public static readonly GUIContent contactShadows = EditorGUIUtility.TrTextContent("Contact Shadows", "When enabled, this Light casts screen space contact shadows.");
             
             // Volumetric Additional light data
             public static readonly GUIContent VolumetricEnable = EditorGUIUtility.TrTextContent("Enable", "When enabled, this Light uses Volumetrics.");

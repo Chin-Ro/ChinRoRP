@@ -80,7 +80,7 @@ namespace UnityEngine.Rendering.Universal
                 };
             }
             
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var currParams = vBufferParams[currIdx];
             
@@ -128,7 +128,7 @@ namespace UnityEngine.Rendering.Universal
 
                 for (int i = 0; i < volumeCount; i++)
                 {
-                    int volumeIndex = EnvironmentsRenderFeature.UnpackFogVolumeIndex(data.fogVolumeSortKeys[i]);
+                    int volumeIndex = EnvironmentsRendererFeature.UnpackFogVolumeIndex(data.fogVolumeSortKeys[i]);
 
                     if (volumeIndex >= data.volumetricFogs.Count)
                         continue;

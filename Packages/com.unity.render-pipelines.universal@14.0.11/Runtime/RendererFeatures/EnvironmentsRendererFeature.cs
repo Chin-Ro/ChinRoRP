@@ -15,7 +15,7 @@ using UnityEditor;
 namespace UnityEngine.Rendering.Universal
 {
     [DisallowMultipleRendererFeature("Environments")]
-    public class EnvironmentsRenderFeature : ScriptableRendererFeature
+    public class EnvironmentsRendererFeature : ScriptableRendererFeature
     {
         public EnvironmentsData environmentsData;
         public bool lightShafts = true;
@@ -125,7 +125,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (lightShafts)
             {
-                m_LightShaftsPass ??= new LightShaftsPass(RenderPassEvent.BeforeRenderingSkybox, environmentsData);
+                m_LightShaftsPass ??= new LightShaftsPass(environmentsData);
                 m_LightShaftsBloomPass ??= new LightShaftsBloomPass(RenderPassEvent.BeforeRenderingPostProcessing, environmentsData);
             }
 
@@ -221,8 +221,13 @@ namespace UnityEngine.Rendering.Universal
             EnvironmentsUtils.UpdateShaderVariablesEnvironmentsCB(ref m_ShaderVariablesEnvironments, renderingData, vBufferParams, s_CurrentVolumetricBufferSize, enableLightShafts, enableVolumetricFog);
             ConstantBuffer.PushGlobal(renderingData.commandBuffer, m_ShaderVariablesEnvironments, EnvironmentConstants._ShaderVariablesEnvironments);
             
+            bool isRendererDeferred = renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
+            
             if (enableFog)
             {
+                RenderPassEvent fogPassEvent = RenderPassEvent.AfterRenderingPrePasses + 1;
+                if (isRendererDeferred) fogPassEvent = RenderPassEvent.AfterRenderingGbuffer;
+                
                 if (enableVolumetricFog)
                 {
                     // Frustum cull Local Volumetric Fog on the CPU. Can be performed as soon as the camera is set up.
@@ -236,11 +241,7 @@ namespace UnityEngine.Rendering.Universal
                     descriptor.msaaSamples = 1;
                     RenderingUtils.ReAllocateIfNeeded(ref m_MaxZMask, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Dilated MaxZ mask");
                     
-                    RenderPassEvent volumetricPassEvent = RenderPassEvent.AfterRenderingOpaques;
-                    bool isRendererDeferred = renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
-                    if (isRendererDeferred) volumetricPassEvent = RenderPassEvent.AfterRenderingGbuffer;
-                    
-                    m_GenerateMaxZPass.Setup(ref m_MaxZMask, volumetricPassEvent, isRendererDeferred, vBufferParams);
+                    m_GenerateMaxZPass.Setup(ref m_MaxZMask, fogPassEvent, isRendererDeferred, vBufferParams);
                     
                     descriptor.width = s_CurrentVolumetricBufferSize.x;
                     descriptor.height = s_CurrentVolumetricBufferSize.y;
@@ -257,15 +258,15 @@ namespace UnityEngine.Rendering.Universal
                     VolumetricLightingUtils.UpdateShaderVariableslVolumetrics(ref m_ShaderVariablesVolumetric, renderingData.cameraData, resolution,
                         m_VisibleLocalVolumetricFogVolumes.Count, vBufferParams);
                     
-                    m_ClearAndHeightFogVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, vBufferParams, m_ShaderVariablesVolumetric);
+                    m_ClearAndHeightFogVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, fogPassEvent, vBufferParams, m_ShaderVariablesVolumetric);
 
-                    m_FogVolumeVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, volumetricPassEvent, m_VisibleLocalVolumetricFogVolumes,
+                    m_FogVolumeVoxelizationPass.Setup(ref m_VolumetricDensityBuffer, fogPassEvent, m_VisibleLocalVolumetricFogVolumes,
                         maxLocalVolumetricFogOnScreen, vBufferParams, m_VisibleVolumeBoundsBuffer, m_VolumetricMaterialDataBuffer, m_DefaultVolumetricFogMaterial,
                         m_VisibleVolumeData, m_VisibleVolumeBounds, m_VolumetricMaterialIndexBuffer, m_VolumetricFogSortKeys);
 
                     RenderingUtils.ReAllocateIfNeeded(ref m_VolumetricLighting, descriptor,  FilterMode.Bilinear, TextureWrapMode.Clamp, name: "VBufferLighting");
 
-                    m_VolumetricLightingPass.Setup(ref m_VolumetricLighting, m_VolumetricDensityBuffer, m_MaxZMask, volumetricPassEvent, vBufferParams,
+                    m_VolumetricLightingPass.Setup(ref m_VolumetricLighting, m_VolumetricDensityBuffer, m_MaxZMask, fogPassEvent, vBufferParams,
                         m_ShaderVariablesVolumetric);
                 }
 
@@ -277,9 +278,9 @@ namespace UnityEngine.Rendering.Universal
                     descriptor.dimension = TextureDimension.Tex2D;
                     descriptor.graphicsFormat = GraphicsFormat.R8_UNorm;
                     descriptor.enableRandomWrite = false;
-                    descriptor.msaaSamples = 1;
+                    descriptor.msaaSamples = renderingData.cameraData.cameraTargetDescriptor.msaaSamples;;
                     
-                    m_LightShaftsPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
+                    m_LightShaftsPass.Setup(fogPassEvent, descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
                 }
                 
                 if (enableLightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData))
@@ -541,7 +542,7 @@ namespace UnityEngine.Rendering.Universal
                 return;
             }
             
-            uint frameIndex = (uint)EnvironmentsRenderFeature.frameIndex;
+            uint frameIndex = (uint)EnvironmentsRendererFeature.frameIndex;
             uint currIdx = (frameIndex + 0) & 1;
 
             var currParams = vBufferParams[currIdx];

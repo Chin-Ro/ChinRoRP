@@ -14,14 +14,15 @@ namespace UnityEngine.Rendering.Universal
         private Material m_LightShaftsMaterial;
         private int m_LightShaftBlurNumSamples;
         private float m_LightShaftFirstPassDistance;
-        public LightShaftsPass(RenderPassEvent passEvent, EnvironmentsData data)
+        public LightShaftsPass(EnvironmentsData data)
         {
-            renderPassEvent = passEvent;
+            ConfigureInput(ScriptableRenderPassInput.Depth);
             m_LightShaftsMaterial = Load(data.lightShaftsShader);
         }
         
-        public void Setup(RenderTextureDescriptor descriptor, int lightShaftBlurNumSamples, float lightShaftFirstPassDistance)
+        public void Setup(RenderPassEvent passEvent, RenderTextureDescriptor descriptor, int lightShaftBlurNumSamples, float lightShaftFirstPassDistance)
         {
+            renderPassEvent = passEvent;
             m_LightShaftsDesc = descriptor;
             m_LightShaftBlurNumSamples = lightShaftBlurNumSamples;
             m_LightShaftFirstPassDistance = lightShaftFirstPassDistance;
@@ -39,7 +40,7 @@ namespace UnityEngine.Rendering.Universal
                 VisibleLight mainLight = renderingData.lightData.visibleLights[renderingData.lightData.mainLightIndex];
                 Vector3 lightDir = -mainLight.localToWorldMatrix.GetColumn(2);
                 Vector3 lightPos = camera.transform.position + lightDir * camera.farClipPlane;
-                Vector3 lightPosScreen = camera.WorldToScreenPoint(lightPos);
+                Vector3 lightPosScreen = camera.WorldToScreenPoint(lightPos) * renderingData.cameraData.renderScale;
                 
                 // 判断方向光是否在相机背面
                 float directionalLightInScreen = 1;

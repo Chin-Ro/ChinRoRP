@@ -57,8 +57,9 @@ namespace UnityEngine.Rendering.Universal
         {
             var contactShadows = VolumeManager.instance.stack.GetComponent<ContactShadows>();
             bool a = contactShadows.enable.value;
+            bool b = contactShadows.length.value > 0.0f;
             
-            return a;
+            return a && b;
         }
     }
 }

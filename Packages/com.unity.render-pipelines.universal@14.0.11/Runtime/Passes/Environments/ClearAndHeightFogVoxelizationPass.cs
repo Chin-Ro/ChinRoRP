@@ -45,7 +45,7 @@ namespace UnityEngine.Rendering.Universal
         {
             if (!Fog.IsVolumetricFogEnabled(renderingData.cameraData)) return;
             
-            int frameIndex = EnvironmentsRenderFeature.frameIndex;
+            int frameIndex = EnvironmentsRendererFeature.frameIndex;
             var currIdx = (frameIndex + 0) & 1;
             var currParams = vBufferParams[currIdx];
 

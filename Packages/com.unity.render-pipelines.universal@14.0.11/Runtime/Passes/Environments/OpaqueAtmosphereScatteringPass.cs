@@ -12,7 +12,8 @@ namespace UnityEngine.Rendering.Universal
         public OpaqueAtmosphereScatteringPass(RenderPassEvent passEvent, EnvironmentsData data)
         {
             renderPassEvent = passEvent;
-            m_Material = Load(data.opaqueAtmosphericScatteringShader); 
+            m_Material = Load(data.opaqueAtmosphericScatteringShader);
+            ConfigureInput(ScriptableRenderPassInput.Depth);
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
