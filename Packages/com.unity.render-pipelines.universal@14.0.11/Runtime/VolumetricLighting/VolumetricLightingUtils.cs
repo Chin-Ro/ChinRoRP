@@ -337,7 +337,8 @@ namespace UnityEngine.Rendering.Universal
             }
 
             universalCamera.volumetricHistoryBuffers = null;
-            universalCamera.volumetricHistoryIsValid = false;
+            
+            universalCamera.Reset();
         }
         
         internal static void CreateVolumetricHistoryBuffers(CameraData universalCamera, int bufferCount)

@@ -1345,6 +1345,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 cameraData.prevWorldSpaceCameraPos = camera.transform.position;
                 cameraData.prevViewProjectionMatrix = gpuVP;
+                cameraData.isFirstFrame = false;
             }
             else
             {

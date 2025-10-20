@@ -17,6 +17,7 @@
 #pragma multi_compile _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
 #pragma multi_compile _ _ADDITIONAL_LIGHTS
 #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
+#pragma multi_compile _ _FORWARD_PLUS
 
 // Don't want contact shadows
 #define LIGHT_EVALUATION_NO_CONTACT_SHADOWS // To define before LightEvaluation.hlsl
@@ -40,7 +41,6 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/ShaderVariablesEnvironments.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/GlobalIllumination.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/UnrealEngineHeightFog.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/GeometricTools.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/VBuffer.hlsl"
@@ -266,85 +266,86 @@ VoxelLighting EvaluateVoxelLightingLocal(PositionInputs posInput, float3 centerW
 #if defined(_ADDITIONAL_LIGHTS)
     uint visibleLightCount = _AdditionalLightsCount.y;
 
-LIGHT_LOOP_BEGIN(visibleLightCount)
-    float volumetricDimmer = _AdditionalLightsVolumetric[lightIndex].y;
-    float volumetricShadowDimmer = _AdditionalLightsVolumetric[lightIndex].z;
-    
-    bool sampleLight = volumetricDimmer > 0 && _AdditionalLightsVolumetric[lightIndex].x > 0;
-
-    float tEntr = t0;
-    float tExit = t1;
-
-    float lenMul = 1;
-    
-    float3 lightPositionWS = _AdditionalLightsPosition[lightIndex].xyz;
-    half4 distanceAndSpotAttenuation = _AdditionalLightsAttenuation[lightIndex];
-    
-
-    if (sampleLight)
+    for (uint lightIndex = 0u; lightIndex < visibleLightCount; ++lightIndex)
     {
-        float t, distSq, rcpPdf;
-
-        float lightSqRadius = rcp(distanceAndSpotAttenuation.x);
-        ImportanceSamplePunctualLight(rndVal, lightPositionWS.xyz, lightSqRadius,
-                                                  ray.originWS, ray.jitterDirWS,
-                                              
-                                                  tEntr, tExit,
-                                                  t, distSq, rcpPdf);
-
-        posInput.positionWS = ray.originWS + t * ray.jitterDirWS;
-
-        half4 spotDirection = _AdditionalLightsSpotDir[lightIndex];
-        // Directional lights store direction in lightPosition.xyz and have .w set to 0.0.
-        // This way the following code will work for both directional and punctual lights.
-        float3 lightVector = lightPositionWS.xyz - posInput.positionWS * _AdditionalLightsPosition[lightIndex].w;
-        float distanceSqr = max(dot(lightVector, lightVector), HALF_MIN);
-
-        half3 lightDirection = half3(lightVector * rsqrt(distanceSqr));
-        // full-float precision required on some platforms
-        // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value, cause the light intensity is too low, use physical light parameters to fix it.
-        float attenuation = DistanceAttenuation(distanceSqr, distanceAndSpotAttenuation.xy) * AngleAttenuation(spotDirection.xyz, lightDirection, distanceAndSpotAttenuation.zw);
-
-    #ifndef LIGHT_EVALUATION_NO_HEIGHT_FOG
-        float4 HeightFogInscatteringAndOpacity = GetExponentialHeightFogUE(posInput.positionWS - GetCurrentViewPosition());
-        attenuation *= HeightFogInscatteringAndOpacity.a;
-    #endif
+        float volumetricDimmer = _AdditionalLightsVolumetric[lightIndex].y;
+        float volumetricShadowDimmer = _AdditionalLightsVolumetric[lightIndex].z;
         
-    #if _ADDITIONAL_LIGHT_SHADOWS
-        float shadowAttenuation = AdditionalLightRealtimeShadow(lightIndex, posInput.positionWS, lightDirection);
-        shadowAttenuation = lerp(1.0, shadowAttenuation, volumetricShadowDimmer);
-        attenuation *= shadowAttenuation;
-    #endif
+        bool sampleLight = volumetricDimmer > 0 && _AdditionalLightsVolumetric[lightIndex].x > 0;
 
-        half3 lightColor = _AdditionalLightsColor[lightIndex].rgb * volumetricDimmer * attenuation;
+        float tEntr = t0;
+        float tExit = t1;
+
+        float lenMul = 1;
         
-    #if defined(_LIGHT_COOKIES)
-        float3 cookieColor = SampleAdditionalLightCookie(lightIndex, posInput.positionWS);
-        lightColor *= cookieColor;
-    #endif
-
-        // Important:
-        // Ideally, all scattering calculations should use the jittered versions
-        // of the sample position and the ray direction. However, correct reprojection
-        // of asymmetrically scattered lighting (affected by an anisotropic phase
-        // function) is not possible. We work around this issue by reprojecting
-        // lighting not affected by the phase function. This basically removes
-        // the phase function from the temporal integration process. It is a hack.
-        // The downside is that anisotropy no longer benefits from temporal averaging,
-        // and any temporal instability of anisotropy causes visible jitter.
-        // In order to stabilize the image, we use the voxel center for all
-        // anisotropy-related calculations.
-        float3 centerL = lightPositionWS - centerWS;
-        float cosTheta = dot(centerL, ray.centerDirWS) * rsqrt(dot(centerL, centerL));
-        float phase = CornetteShanksPhasePartVarying(anisotropy, cosTheta);
+        float3 lightPositionWS = _AdditionalLightsPosition[lightIndex].xyz;
+        half4 distanceAndSpotAttenuation = _AdditionalLightsAttenuation[lightIndex];
         
-        float weight = TransmittanceHomogeneousMedium(extinction, t - t0) * rcpPdf;
 
-        // Compute the amount of in-scattered radiance.
-        lighting.radianceNoPhase += (weight * lightColor.rgb);
-        lighting.radianceComplete += (weight * lightColor.rgb) * phase;
+        if (sampleLight)
+        {
+            float t, distSq, rcpPdf;
+
+            float lightSqRadius = rcp(distanceAndSpotAttenuation.x);
+            ImportanceSamplePunctualLight(rndVal, lightPositionWS.xyz, lightSqRadius,
+                                                      ray.originWS, ray.jitterDirWS,
+                                                  
+                                                      tEntr, tExit,
+                                                      t, distSq, rcpPdf);
+
+            posInput.positionWS = ray.originWS + t * ray.jitterDirWS;
+
+            half4 spotDirection = _AdditionalLightsSpotDir[lightIndex];
+            // Directional lights store direction in lightPosition.xyz and have .w set to 0.0.
+            // This way the following code will work for both directional and punctual lights.
+            float3 lightVector = lightPositionWS.xyz - posInput.positionWS * _AdditionalLightsPosition[lightIndex].w;
+            float distanceSqr = max(dot(lightVector, lightVector), HALF_MIN);
+
+            half3 lightDirection = half3(lightVector * rsqrt(distanceSqr));
+            // full-float precision required on some platforms
+            // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value, cause the light intensity is too low, use physical light parameters to fix it.
+            float attenuation = DistanceAttenuation(distanceSqr, distanceAndSpotAttenuation.xy) * AngleAttenuation(spotDirection.xyz, lightDirection, distanceAndSpotAttenuation.zw);
+
+        #ifndef LIGHT_EVALUATION_NO_HEIGHT_FOG
+            float4 HeightFogInscatteringAndOpacity = GetExponentialHeightFogUE(posInput.positionWS - GetCurrentViewPosition());
+            attenuation *= HeightFogInscatteringAndOpacity.a;
+        #endif
+            
+        #if _ADDITIONAL_LIGHT_SHADOWS
+            float shadowAttenuation = AdditionalLightRealtimeShadow(lightIndex, posInput.positionWS, lightDirection);
+            shadowAttenuation = lerp(1.0, shadowAttenuation, volumetricShadowDimmer);
+            attenuation *= shadowAttenuation;
+        #endif
+
+            half3 lightColor = _AdditionalLightsColor[lightIndex].rgb * volumetricDimmer * attenuation;
+            
+        #if defined(_LIGHT_COOKIES)
+            float3 cookieColor = SampleAdditionalLightCookie(lightIndex, posInput.positionWS);
+            lightColor *= cookieColor;
+        #endif
+
+            // Important:
+            // Ideally, all scattering calculations should use the jittered versions
+            // of the sample position and the ray direction. However, correct reprojection
+            // of asymmetrically scattered lighting (affected by an anisotropic phase
+            // function) is not possible. We work around this issue by reprojecting
+            // lighting not affected by the phase function. This basically removes
+            // the phase function from the temporal integration process. It is a hack.
+            // The downside is that anisotropy no longer benefits from temporal averaging,
+            // and any temporal instability of anisotropy causes visible jitter.
+            // In order to stabilize the image, we use the voxel center for all
+            // anisotropy-related calculations.
+            float3 centerL = lightPositionWS - centerWS;
+            float cosTheta = dot(centerL, ray.centerDirWS) * rsqrt(dot(centerL, centerL));
+            float phase = CornetteShanksPhasePartVarying(anisotropy, cosTheta);
+            
+            float weight = TransmittanceHomogeneousMedium(extinction, t - t0) * rcpPdf;
+
+            // Compute the amount of in-scattered radiance.
+            lighting.radianceNoPhase += (weight * lightColor.rgb);
+            lighting.radianceComplete += (weight * lightColor.rgb) * phase;
+        }
     }
-LIGHT_LOOP_END
 #endif
     return lighting;
 }

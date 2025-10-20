@@ -101,14 +101,14 @@ float4 GetExponentialHeightFogUE(float3 WorldPositionRelativeToCamera) // camera
         half3 DirectionalInscattering = 0;
 
         // if _ExponentialFogParameters3.w is negative then it's disabled, otherwise it holds directional inscattering start distance
-        if (_MainLightPosition.y > 0 && ExponentialFogParameters3.w >= 0)
+        if (ExponentialFogParameters3.w >= 0)
         {
             // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value;
-            half3 directionalInscatteringColor = DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb;
+            half3 directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb) * PI;
             // Setup a cosine lobe around the light direction to approximate inscattering from the directional light off of the ambient haze;
-            // const float UniformPhaseFunction = 1.0f / (4.0f * PI);
+            const float UniformPhaseFunction = 1.0f / (4.0f * PI);
             
-            half3 DirectionalLightInscattering = directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _MainLightPosition.xyz)), DirectionalInscatteringColor.w);
+            half3 DirectionalLightInscattering = directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _MainLightPosition.xyz)), DirectionalInscatteringColor.w) * UniformPhaseFunction;
 
             float DirectionalInscatteringStartDistance = ExponentialFogParameters3.w;
             // Calculate the line integral of the eye ray through the haze, using a special starting distance to limit the inscattering to the distance

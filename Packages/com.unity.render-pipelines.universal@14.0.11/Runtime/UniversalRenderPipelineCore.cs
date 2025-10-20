@@ -255,6 +255,13 @@ namespace UnityEngine.Rendering.Universal
             s_Cleanup.Clear();
         }
 
+        internal void Reset()
+        {
+            isFirstFrame = true;
+            volumetricValidFrames = 0;
+            volumetricHistoryIsValid = false;
+        }
+
         void Dispose()
         {
             VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(this);
