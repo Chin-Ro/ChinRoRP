@@ -64,7 +64,6 @@ namespace UnityEngine.Rendering.Universal
         internal static VBufferParameters ComputeVolumetricBufferParameters(CameraData universalCamera)
         {
             var controller = VolumeManager.instance.stack.GetComponent<Fog>();
-            Debug.Assert(controller != null);
 
             float voxelSize = 0;
             Vector3Int viewportSize = ComputeVolumetricViewportSize(universalCamera, ref voxelSize);

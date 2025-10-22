@@ -592,7 +592,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 }
 
                 cmd.SetGlobalVector(LightConstantBuffer._AdditionalLightsCount, new Vector4(lightData.maxPerObjectAdditionalLightsCount,
-                    lights.Length, 0.0f, 0.0f));
+                    lights[0].lightType == LightType.Directional ? lights.Length - 1 : lights.Length, 0.0f, 0.0f));
             }
             else
             {

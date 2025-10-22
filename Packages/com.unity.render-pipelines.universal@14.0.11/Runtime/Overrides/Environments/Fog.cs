@@ -8,7 +8,7 @@ using System;
 
 namespace UnityEngine.Rendering.Universal
 {
-    [Serializable, VolumeComponentMenuForRenderPipeline("Environment/Fog", typeof(UniversalRenderPipeline))]
+    [Serializable, VolumeComponentMenuForRenderPipeline("Environments/Fog", typeof(UniversalRenderPipeline))]
     public class Fog : VolumeComponent
     {
         [Tooltip("开启雾效.")]

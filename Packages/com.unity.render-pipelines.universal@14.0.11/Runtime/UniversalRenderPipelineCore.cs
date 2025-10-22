@@ -205,6 +205,8 @@ namespace UnityEngine.Rendering.Universal
 
         internal bool isFirstFrame = true;
         
+        internal VBufferParameters[] vBufferParams;
+        
         public static CameraData GetOrCreate(Camera camera)
         {
             CameraData cameraData;
