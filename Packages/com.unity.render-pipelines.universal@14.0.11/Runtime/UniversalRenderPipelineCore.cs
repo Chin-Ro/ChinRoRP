@@ -267,6 +267,7 @@ namespace UnityEngine.Rendering.Universal
         void Dispose()
         {
             VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(this);
+            vBufferParams = null;
         }
         
         // Internal camera data as we are not yet sure how to expose View in stereo context.

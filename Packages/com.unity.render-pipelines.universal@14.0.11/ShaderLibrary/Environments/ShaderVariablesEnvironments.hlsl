@@ -52,6 +52,54 @@ uint _VBufferSliceCount;
 float _VBufferRcpSliceCount;
 float _VBufferRcpInstancedViewCount;
 float _VBufferLastSliceDist;
+        
+// SkyAtmosphere
+float MultiScatteringFactor;
+float BottomRadiusKm;
+float TopRadiusKm;
+float RayleighDensityExpScale;
+float4 RayleighScattering;
+float4 MieScattering;
+float4 MieExtinction;
+float4 MieAbsorption;
+float4 AbsorptionExtinction;
+float4 GroundAlbedo;
+float MieDensityExpScale;
+float MiePhaseG;
+float AbsorptionDensity0LayerWidth;
+float AbsorptionDensity0ConstantTerm;
+float AbsorptionDensity0LinearTerm;
+float AbsorptionDensity1ConstantTerm;
+float AbsorptionDensity1LinearTerm;
+        
+// SkyAtmosphere Internal Common Parameters
+float SampleCountMin;
+float SampleCountMax;
+float DistanceToSampleCountMaxInv;
+
+float FastSkySampleCountMin;
+float FastSkySampleCountMax;
+float FastSkyDistanceToSampleCountMaxInv;
+
+float CameraAerialPerspectiveVolumeDepthResolution;
+float CameraAerialPerspectiveVolumeDepthResolutionInv;
+float CameraAerialPerspectiveVolumeDepthSliceLengthKm;
+float4 CameraAerialPerspectiveVolumeSizeAndInvSize;
+float CameraAerialPerspectiveVolumeDepthSliceLengthKmInv;
+float CameraAerialPerspectiveSampleCountPerSlice;
+
+float TransmittanceSampleCount;
+float MultiScatteringSampleCount;
+
+float4 TransmittanceLutSizeAndInvSize;
+float4 MultiScatteredLuminanceLutSizeAndInvSize;
+float4 SkyViewLutSizeAndInvSize;
+
+float4 SkyLuminanceFactor;
+float4 SkyAndAerialPerspectiveLuminanceFactor;
+
+float AerialPespectiveViewDistanceScale;
+float FogShowFlagFactor;
 CBUFFER_END
 
 #define _HeightFogBaseExtinction _HeightFogExponents.z;

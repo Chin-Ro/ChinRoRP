@@ -12,6 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 596774fe17f94f6e959cea8a79340880, type: 3}
   m_Name: EnvironmentsData
   m_EditorClassIdentifier: 
+  skyAtmosphereLookUpTablesCS: {fileID: 7200000, guid: d44be53fc58c449989e8daeefdb8279d,
+    type: 3}
   generateMaxZCS: {fileID: 7200000, guid: 130a3536cb5346ea907249607e311fbe, type: 3}
   volumeVoxelizationCS: {fileID: 7200000, guid: 1437596b227b46d5b700e97a22bd9010,
     type: 3}

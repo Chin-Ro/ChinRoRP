@@ -1,0 +1,371 @@
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/ShaderVariablesEnvironments.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/SkyAtmosphereCommon.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/SkyUtils.hlsl"
+
+#pragma enable_d3d11_debug_symbols
+
+#pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+#pragma kernel RenderTransmittanceLutCS RENDER_TRANSMITTANCELUT
+
+#pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
+
+#if RENDER_TRANSMITTANCELUT
+#define THREADGROUP_SIZE 8
+#define WHITE_TRANSMITTANCE 1
+#define TRANSMITTANCE_PASS  1
+#endif
+
+// View data is not available for passes running once per scene (and not once per view).
+#define VIEWDATA_AVAILABLE (TRANSMITTANCE_PASS!=1 && MULTISCATT_PASS!=1 && SKYLIGHT_PASS!=1)
+
+#ifndef THREADGROUP_SIZE
+#define THREADGROUP_SIZE 1
+#endif
+
+#ifndef PER_PIXEL_NOISE
+#define PER_PIXEL_NOISE 0
+#endif
+
+////////////////////////////////////////////////////////////
+// Utilities
+////////////////////////////////////////////////////////////
+
+#if VIEWDATA_AVAILABLE
+// Exposure used for regular views by the FastSky and AP LUTs.
+#define ViewPreExposure			View.PreExposure
+#define ViewOneOverPreExposure	View.OneOverPreExposure
+// When rendering a real time reflection capture (sky envmap) whe use a different output exposure
+#define OutputPreExposure		1.0f
+#else
+#define ViewPreExposure			1.0f
+#define ViewOneOverPreExposure	1.0f
+#define OutputPreExposure		1.0f
+#endif
+
+RW_TEXTURE2D(float3, _TransmittanceLutUAV);
+
+////////////////////////////////////////////////////////////
+// LUT functions
+////////////////////////////////////////////////////////////
+
+// Transmittance LUT function parameterisation from Bruneton 2017 https://github.com/ebruneton/precomputed_atmospheric_scattering
+// uv in [0,1]
+// ViewZenithCosAngle in [-1,1]
+// ViewHeight in [bottomRAdius, topRadius]
+void UvToLutTransmittanceParams(out float ViewHeight, out float ViewZenithCosAngle, in float2 UV)
+{
+    //UV = FromSubUvsToUnit(UV, SkyAtmosphere.TransmittanceLutSizeAndInvSize); // No real impact so off
+    fromTransmittanceLutUVs(ViewHeight, ViewZenithCosAngle, BottomRadiusKm, TopRadiusKm, UV);
+}
+
+// void LutTransmittanceParamsToUv(in float ViewHeight, in float ViewZenithCosAngle, out float2 UV)
+// {
+//     getTransmittanceLutUvs(ViewHeight, ViewZenithCosAngle, BottomRadiusKm, TopRadiusKm, UV);
+// }
+//
+// float3 GetTransmittance(in float LightZenithCosAngle, in float PHeight)
+// {
+//     float2 UV;
+//     LutTransmittanceParamsToUv(PHeight, LightZenithCosAngle, UV);
+//     #ifdef WHITE_TRANSMITTANCE
+//     float3 TransmittanceToLight = 1.0f;
+//     #else
+//     float3 TransmittanceToLight = TransmittanceLutTexture.SampleLevel(TransmittanceLutTextureSampler, UV, 0).rgb;
+//     #endif
+//     return TransmittanceToLight;
+// }
+
+#define DEFAULT_SAMPLE_OFFSET 0.3f
+float SkyAtmosphereNoise(float2 UV)
+{
+    //	return DEFAULT_SAMPLE_OFFSET;
+    //	return float(Rand3DPCG32(int3(UV.x, UV.y, S)).x) / 4294967296.0f;
+    #if VIEWDATA_AVAILABLE && PER_PIXEL_NOISE
+    return View.RealTimeReflectionCapture ? DEFAULT_SAMPLE_OFFSET : InterleavedGradientNoise(UV.xy, float(View.StateFrameIndexMod8));
+    #else
+    return DEFAULT_SAMPLE_OFFSET;
+    #endif
+}
+
+////////////////////////////////////////////////////////////
+// Main scattering/transmitance integration function
+////////////////////////////////////////////////////////////
+
+struct SingleScatteringResult
+{
+    float3 L;						// Scattered light (luminance)
+    float3 LMieOnly;				// L but Mie scattering only
+    float3 LRayOnly;				// L but Rayleigh scattering only
+    float3 OpticalDepth;			// Optical depth (1/m)
+    float3 Transmittance;			// Transmittance in [0,1] (unitless)
+    float3 TransmittanceMieOnly;	// Transmittance in [0,1] (unitless) but Mie scattering only
+    float3 TransmittanceRayOnly;	// Transmittance in [0,1] (unitless) but Rayleigh scattering only
+    float3 MultiScatAs1;
+};
+
+struct SamplingSetup
+{
+    bool VariableSampleCount;
+    float SampleCountIni;			// Used when VariableSampleCount is false
+    float MinSampleCount;
+    float MaxSampleCount;
+    float DistanceToSampleCountMaxInv;
+};
+
+// In this function, all world position are relative to the planet center (itself expressed within translated world space)
+SingleScatteringResult IntegrateSingleScatteredLuminance(
+    in float4 SVPos, in float3 WorldPos, in float3 WorldDir,
+    in bool Ground, in SamplingSetup Sampling, in float DeviceZ, in bool MieRayPhase,
+    in float3 Light0Dir, in float3 Light1Dir, in float3 Light0Illuminance, in float3 Light1Illuminance,
+    in float AerialPespectiveViewDistanceScale,
+    in float tMaxMax = 9000000.0f)
+{
+    SingleScatteringResult Result;
+    Result.L = 0;
+    Result.LMieOnly = 0;
+    Result.LRayOnly = 0;
+    Result.OpticalDepth = 0;
+    Result.Transmittance = 1.0f;
+    Result.TransmittanceMieOnly = 1.0f;
+    Result.TransmittanceRayOnly = 1.0f;
+    Result.MultiScatAs1 = 0;
+
+    if (dot(WorldPos, WorldPos) <= BottomRadiusKm * BottomRadiusKm)
+    {
+        return Result;	// Camera is inside the planet ground
+    }
+
+    float2 PixPos = SVPos.xy;
+
+    // Compute next intersection with atmosphere or ground
+    float3 PlanetO = float3(0.0f, 0.0f, 0.0f);
+    float tMax = 0.0f;
+
+    float tBottom = 0.0f;
+    float2 SolB = RayIntersectSphere(WorldPos, WorldDir, float4(PlanetO, BottomRadiusKm));
+    float2 SolT = RayIntersectSphere(WorldPos, WorldDir, float4(PlanetO, TopRadiusKm));
+
+    const bool bNoBotIntersection = all(SolB < 0.0f);
+    const bool bNoTopIntersection = all(SolT < 0.0f);
+    if (bNoTopIntersection)
+    {
+        // No intersection with planet or its atmosphere.
+        tMax = 0.0f;
+        return Result;
+    }
+    else if (bNoBotIntersection)
+    {
+        // No intersection with planet, so we trace up to the far end of the top atmosphere 
+        // (looking up from ground or edges when see from afar in space).
+        tMax = max(SolT.x, SolT.y);
+    }
+    else
+    {
+        // Interesection with planet and atmospehre: we simply trace up to the planet ground.
+        // We know there is at least one intersection thanks to bNoBotIntersection.
+        // If one of the solution is invalid=-1, that means we are inside the planet: we stop tracing by setting tBottom=0.
+        tBottom = max(0.0f, min(SolB.x, SolB.y));
+        tMax = tBottom;
+    }
+
+    float PlanetOnOpaque = 1.0f;	// This is used to hide opaque meshes under the planet ground
+
+#if VIEWDATA_AVAILABLE
+#if SAMPLE_ATMOSPHERE_ON_CLOUDS
+    if (true)
+    {
+        float tDepth = DeviceZ; // When SAMPLE_ATMOSPHERE_ON_CLOUDS, DeviceZ is world distance in kilometer.
+        if (tDepth < tMax)
+        {
+            tMax = tDepth;
+        }
+    }
+#else // SAMPLE_ATMOSPHERE_ON_CLOUDS
+    if (DeviceZ != FarDepthValue)
+    {
+        // const float3 DepthBufferTranslatedWorldPosKm = ComputeWorldSpacePosition(SVPos.xy, DeviceZ, UNITY_MATRIX_I_VP).xyz * M_TO_SKY_UNIT;
+        // const float3 TraceStartTranslatedWorldPosKm  = WorldPos + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz * M_TO_SKY_UNIT; // apply planet offset to go back to world from planet local referencial.
+        // const float3 TraceStartToSurfaceWorldKm = DepthBufferTranslatedWorldPosKm - TraceStartTranslatedWorldPosKm;
+        // float tDepth = length(TraceStartToSurfaceWorldKm);
+        // if (tDepth < tMax)
+        // {
+        //     tMax = tDepth;
+        // }
+        // else
+        // {
+        //     // Artists did not like that we handle automatic hiding of opaque element behind the planet.
+        //     // Now, pixel under the surface of earht will receive aerial perspective as if they were  on the ground.
+        //     //PlanetOnOpaque = 0.0;
+        // }
+        //
+        // //if the ray intersects with the atmosphere boundary, make sure we do not apply atmosphere on surfaces are front of it. 
+        // if (dot(WorldDir, TraceStartToSurfaceWorldKm) < 0.0)
+        // {
+        //     return Result;
+        // }
+    }
+#endif // SAMPLE_ATMOSPHERE_ON_CLOUDS
+#endif
+
+    tMax = min(tMax, tMaxMax);
+
+    // Sample count 
+    float SampleCount = Sampling.SampleCountIni;
+    float SampleCountFloor = Sampling.SampleCountIni;
+    float tMaxFloor = tMax;
+    if (Sampling.VariableSampleCount)
+    {
+        SampleCount = lerp(Sampling.MinSampleCount, Sampling.MaxSampleCount, saturate(tMax*Sampling.DistanceToSampleCountMaxInv));
+        SampleCountFloor = floor(SampleCount);
+        tMaxFloor = tMax * SampleCountFloor / SampleCount;	// rescale tMax to map to the last entire step segment.
+    }
+    float dt = tMax / SampleCount;
+
+    // Phase functions
+    const float uniformPhase = 1.0f / (4.0f * PI);
+    const float3 wi = Light0Dir;
+    const float3 wo = WorldDir;
+    float cosTheta = dot(wi, wo);
+    float MiePhaseValueLight0 = HenyeyGreensteinPhase(MiePhaseG, -cosTheta);	// negate cosTheta because due to WorldDir being a "in" direction. 
+    float RayleighPhaseValueLight0 = RayleighPhase(cosTheta);
+
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+    cosTheta = dot(Light1Dir, wo);
+    float MiePhaseValueLight1 = HenyeyGreensteinPhase(MiePhaseG, -cosTheta);	// negate cosTheta because due to WorldDir being a "in" direction. 
+    float RayleighPhaseValueLight1 = RayleighPhase(cosTheta);
+#endif
+
+    // Ray march the atmosphere to integrate optical depth
+    float3 L = 0.0f;
+    float3 LMieOnly = 0.0f;
+    float3 LRayOnly = 0.0f;
+    float3 Throughput = 1.0f;
+    float3 ThroughputMieOnly = 1.0f;
+    float3 ThroughputRayOnly = 1.0f;
+    float3 OpticalDepth = 0.0f;
+    float t = 0.0f;
+    float tPrev = 0.0f;
+
+    float3 ExposedLight0Illuminance = Light0Illuminance * OutputPreExposure;
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+    float3 ExposedLight1Illuminance = Light1Illuminance * OutputPreExposure;
+#endif
+
+#if SKYVIEWLUT_PASS
+    float3x3 LocalReferencial = GetSkyViewLutReferential(View.SkyViewLutReferential);
+#endif
+
+    float PixelNoise = PER_PIXEL_NOISE ? SkyAtmosphereNoise(PixPos.xy) : DEFAULT_SAMPLE_OFFSET;
+
+    for (float SampleI = 0.0f; SampleI < SampleCount; SampleI += 1.0f)
+    {
+        // Compute current ray t and sample point P
+        if (Sampling.VariableSampleCount)
+        {
+            // More expenssive but artefact free
+            float t0 = (SampleI) / SampleCountFloor;
+            float t1 = (SampleI + 1.0f) / SampleCountFloor;;
+            // Non linear distribution of samples within the range.
+            t0 = t0 * t0;
+            t1 = t1 * t1;
+            // Make t0 and t1 world space distances.
+            t0 = tMaxFloor * t0;
+            if (t1 > 1.0f)
+            {
+                t1 = tMax;
+                //t1 = tMaxFloor;	// this reveal depth slices
+            }
+            else
+            {
+                t1 = tMaxFloor * t1;
+            }
+            t = t0 + (t1 - t0) * PixelNoise;
+            dt = t1 - t0;
+        }
+        else
+        {
+            t = tMax * (SampleI + PixelNoise) / SampleCount;
+        }
+        float3 P = WorldPos + t * WorldDir;
+        float PHeight = length(P);
+
+        // Sample the medium
+        MediumSampleRGB Medium = SampleAtmosphereMediumRGB(P);
+        const float3 SampleOpticalDepth = Medium.Extinction * dt * AerialPespectiveViewDistanceScale;
+        const float3 SampleTransmittance = exp(-SampleOpticalDepth);
+        OpticalDepth += SampleOpticalDepth;
+
+        // // Transmittance Ray only and Mie only set half of ozone in rayleigh and half of ozone in mie parts.
+        // // This is not great but I do not have any better solution. 
+        // // Also most of the time Ozone is high in the atmosphere so it should be fine this way.
+        // ThroughputMieOnly *= exp(-(Medium.ExtinctionMie + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
+        // ThroughputRayOnly *= exp(-(Medium.ExtinctionRay + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
+        //
+        // // Phase and transmittance for light 0
+        // const float3 UpVector = P / PHeight;
+        // float Light0ZenithCosAngle = dot(Light0Dir, UpVector);
+        // float3 TransmittanceToLight0 = GetTransmittance(Light0ZenithCosAngle, PHeight);
+        // float3 PhaseTimesScattering0;
+        // float3 PhaseTimesScattering0MieOnly;
+        // float3 PhaseTimesScattering0RayOnly;
+        // if (MieRayPhase)
+        // {
+        //     PhaseTimesScattering0MieOnly= Medium.ScatteringMie * MiePhaseValueLight0;
+        //     PhaseTimesScattering0RayOnly= Medium.ScatteringRay * RayleighPhaseValueLight0;
+        //     PhaseTimesScattering0		= PhaseTimesScattering0MieOnly + PhaseTimesScattering0RayOnly;
+        // }
+        // else
+        // {
+        //     PhaseTimesScattering0MieOnly= Medium.ScatteringMie * uniformPhase;
+        //     PhaseTimesScattering0RayOnly= Medium.ScatteringRay * uniformPhase;
+        //     PhaseTimesScattering0		= Medium.Scattering * uniformPhase;
+        // }
+
+    }
+        Result.OpticalDepth			= OpticalDepth;
+        return Result;
+}
+
+////////////////////////////////////////////////////////////
+// Transmittance LUT
+////////////////////////////////////////////////////////////
+
+[numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
+void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
+{
+    float2 PixPos = float2(ThreadId.xy) + 0.5f;
+
+    // Compute camera position from LUT coords
+    float2 UV = (PixPos) * TransmittanceLutSizeAndInvSize.zw;
+    float ViewHeight;
+    float ViewZenithCosAngle;
+    
+    UvToLutTransmittanceParams(ViewHeight, ViewZenithCosAngle, UV);
+    
+    //  A few extra needed constants
+    float3 WorldPos = float3(0.0f, ViewHeight, 0.0f);
+    float3 WorldDir = float3(0.0f, ViewZenithCosAngle, sqrt(1.0f - ViewZenithCosAngle * ViewZenithCosAngle));
+
+    SamplingSetup Sampling = (SamplingSetup)0;
+    {
+        Sampling.VariableSampleCount = false;
+        Sampling.SampleCountIni = TransmittanceSampleCount;
+    }
+    const bool Ground = false;
+    const float DeviceZ = FarDepthValue;
+    const bool MieRayPhase = false;
+    const float3 NullLightDirection = float3(0.0f, 1.0f, 0.0f);
+    const float3 NullLightIlluminance = float3(0.0f, 0.0f, 0.0f);
+    const float AerialPespectiveViewDistanceScale = 1.0f;
+    SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
+        float4(PixPos,0.0f,1.0f), WorldPos, WorldDir,
+        Ground, Sampling, DeviceZ, MieRayPhase,
+        NullLightDirection, NullLightDirection, NullLightIlluminance, NullLightIlluminance,
+        AerialPespectiveViewDistanceScale);
+
+    float3 transmittance = exp(-ss.OpticalDepth);
+
+    _TransmittanceLutUAV[int2(PixPos)] = transmittance;
+}

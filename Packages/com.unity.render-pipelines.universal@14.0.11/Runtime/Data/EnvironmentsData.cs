@@ -32,7 +32,8 @@ namespace UnityEngine.Rendering.Universal
             ProjectWindowUtil.StartNameEditingIfProjectWindowExists(0, CreateInstance<CreateEnvironmentsDataAsset>(), "EnvironmentsData.asset", null, null);
         }
 #endif
-        
+
+        public ComputeShader skyAtmosphereLookUpTablesCS;
         public ComputeShader generateMaxZCS;
         public ComputeShader volumeVoxelizationCS;
         public ComputeShader volumetricMaterialCS;

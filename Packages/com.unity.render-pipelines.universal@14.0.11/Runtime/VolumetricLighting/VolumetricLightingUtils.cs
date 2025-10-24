@@ -15,6 +15,38 @@ namespace UnityEngine.Rendering.Universal
     #region VolumetricLightingUtils
     public class VolumetricLightingUtils
     {
+        internal static void UpdateShaderVariablesGlobalVolumetrics(ref ShaderVariablesEnvironments cb, CameraData cameraData, in VBufferParameters[] vBufferParams, in Vector3Int s_CurrentVolumetricBufferSize)
+        {
+            if (!Fog.IsVolumetricFogEnabled(cameraData))
+            {
+                return;
+            }
+            
+            uint frameIndex = (uint)EnvironmentsRendererFeature.frameIndex;
+            uint currIdx = (frameIndex + 0) & 1;
+
+            var currParams = vBufferParams[currIdx];
+
+            // The lighting & density buffers are shared by all cameras.
+            // The history & feedback buffers are specific to the camera.
+            // These 2 types of buffers can have different sizes.
+            // Additionally, history buffers can have different sizes, since they are not resized at the same time.
+            var cvp = currParams.viewportSize;
+
+            // Adjust slices for XR rendering: VBuffer is shared for all single-pass views
+            uint sliceCount = (uint)(cvp.z / 1);
+
+            cb._VBufferViewportSize = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
+            cb._VBufferSliceCount = sliceCount;
+            cb._VBufferRcpSliceCount = 1.0f / sliceCount;
+            cb._VBufferLightingViewportScale = currParams.ComputeViewportScale(s_CurrentVolumetricBufferSize);
+            cb._VBufferLightingViewportLimit = currParams.ComputeViewportLimit(s_CurrentVolumetricBufferSize);
+            cb._VBufferDistanceEncodingParams = currParams.depthEncodingParams;
+            cb._VBufferDistanceDecodingParams = currParams.depthDecodingParams;
+            cb._VBufferLastSliceDist = currParams.ComputeLastSliceDistance(sliceCount);
+            cb._VBufferRcpInstancedViewCount = 1.0f / 1;
+        }
+        
         internal static void ComputeVolumetricFogSliceCountAndScreenFraction(Fog fog, out int sliceCount, out float screenFraction)
         {
             if (EnvironmentsRendererFeature.m_FogControl == FogControl.Balance)

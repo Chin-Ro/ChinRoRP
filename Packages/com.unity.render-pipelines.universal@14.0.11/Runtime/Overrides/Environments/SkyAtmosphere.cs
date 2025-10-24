@@ -11,62 +11,208 @@ namespace UnityEngine.Rendering.Universal
     public class SkyAtmosphere : VolumeComponent
     {
         // All distance here are in kilometer and scattering/absorptions coefficient in 1/kilometers.
-        const float earthBottomRadius = 6360.0f;
-        const float earthTopRadius = 6420.0f;
-        const float earthRayleighScaleHeight = 8.0f;
-        const float earthMieScaleHeight = 1.2f;
+        const float EarthBottomRadius = 6360.0f;
+        const float EarthTopRadius = 6420.0f;
+        const float EarthRayleighScaleHeight = 8.0f;
+        const float EarthMieScaleHeight = 1.2f;
         
         // Float to a u8 rgb + float length can lose some precision but it is better UI wise.
-        static Color rayleightScatteringRaw = new Color(5.802f, 13.558f, 33.1f);
-        static Color otherAbsorptionRaw = new Color(0.000650f, 0.001881f, 0.000085f);
+        static Color RayleightScatteringRaw = new Color(0.005802f, 0.013558f, 0.033100f);
+        static Color OtherAbsorptionRaw = new Color(0.000650f, 0.001881f, 0.000085f);
         
         public BoolParameter enable = new BoolParameter(false);
         
         [Header("Planet")]
-        public TransformModeParameter transformMode = new TransformModeParameter(TransformMode.PlanetTopAtAbsoluteWorldOrigin, false);
-        public ClampedFloatParameter bottomRadius = new ClampedFloatParameter(earthBottomRadius, 1.0f, 7000.0f);
-        public ColorParameter groundAlbedo = new ColorParameter(new Color32(170,170,170,255), false, false, true);
+        public SkyAtmosphereTransformMode TransforMode = new SkyAtmosphereTransformMode(ESkyAtmosphereTransformMode.PlanetTopAtAbsoluteWorldOrigin, false);
+        public ClampedFloatParameter BottomRadius = new ClampedFloatParameter(EarthBottomRadius, 1.0f, 7000.0f);
+        public ColorParameter GroundAlbedo = new ColorParameter(new Color32(170,170,170,255), false, false, true);
 
         [Header("Atmosphere")] 
-        public ClampedFloatParameter atmosphereHeight = new ClampedFloatParameter(earthTopRadius - earthBottomRadius, 1.0f, 200.0f);
-        public ClampedFloatParameter multiScatteringFactor = new ClampedFloatParameter(1.0f, 0.0f, 2.0f);
-        [AdditionalProperty] public ClampedFloatParameter traceSampleCountScale = new ClampedFloatParameter(1.0f, 0.25f, 8f);
+        public ClampedFloatParameter AtmosphereHeight = new ClampedFloatParameter(EarthTopRadius - EarthBottomRadius, 1.0f, 200.0f);
+        public ClampedFloatParameter MultiScatteringFactor = new ClampedFloatParameter(1.0f, 0.0f, 2.0f);
+        [AdditionalProperty] public ClampedFloatParameter TraceSampleCountScale = new ClampedFloatParameter(1.0f, 0.25f, 8f);
 
         [Header("Atmosphere - Rayleigh")] 
-        public ClampedFloatParameter rayleighScatteringScale = new ClampedFloatParameter(rayleightScatteringRaw.b, 0.0f, 2.0f);
-        public ColorParameter rayleighScattering = new ColorParameter(rayleightScatteringRaw * (1.0f / rayleightScatteringRaw.b));
-        public ClampedFloatParameter rayleighExponentialDistribution = new ClampedFloatParameter(earthRayleighScaleHeight, 0.01f, 20.0f);
+        public ClampedFloatParameter RayleighScatteringScale = new ClampedFloatParameter(RayleightScatteringRaw.b, 0.0f, 2.0f);
+        public ColorParameter RayleighScattering = new ColorParameter(RayleightScatteringRaw * (1.0f / RayleightScatteringRaw.b), false, false, true);
+        public ClampedFloatParameter RayleighExponentialDistribution = new ClampedFloatParameter(EarthRayleighScaleHeight, 0.01f, 20.0f);
 
         [Header("Atmosphere - Mie")] 
-        public ClampedFloatParameter mieScatteringScale = new ClampedFloatParameter(0.003996f, 0.0f, 5.0f);
-        public ColorParameter mieScattering = new ColorParameter(Color.white, false, false, true);
-        public ClampedFloatParameter mieAbsorptionScale = new ClampedFloatParameter(0.000444f, 0.0f, 5.0f);
-        public ColorParameter mieAbsorption = new ColorParameter(Color.white, false, false, true);
-        public ClampedFloatParameter mieExponentialDistribution = new ClampedFloatParameter(earthMieScaleHeight, 0.01f, 20.0f);
+        public ClampedFloatParameter MieScatteringScale = new ClampedFloatParameter(0.003996f, 0.0f, 5.0f);
+        public ColorParameter MieScattering = new ColorParameter(Color.white, false, false, true);
+        public ClampedFloatParameter MieAbsorptionScale = new ClampedFloatParameter(0.000444f, 0.0f, 5.0f);
+        public ColorParameter MieAbsorption = new ColorParameter(Color.white, false, false, true);
+        public ClampedFloatParameter MieAnisotropy = new ClampedFloatParameter(0.8f, 0.0f, 0.999f);
+        public ClampedFloatParameter MieExponentialDistribution = new ClampedFloatParameter(EarthMieScaleHeight, 0.01f, 20.0f);
 
         [Header("Atmosphere - Absorption")] 
-        public ClampedFloatParameter otherAbsorptionScale = new ClampedFloatParameter(otherAbsorptionRaw.g, 0.0f, 0.2f);
-        public ColorParameter otherAbsorption = new ColorParameter(otherAbsorptionRaw * (1.0f / otherAbsorptionRaw.g));
-        [AdditionalProperty] public ClampedFloatParameter tipAltitude = new ClampedFloatParameter(25.0f, 0.0f, 60.0f);
-        [AdditionalProperty] public ClampedFloatParameter tipValue = new ClampedFloatParameter(1.0f, 0.0f, 1.0f);
-        [AdditionalProperty] public ClampedFloatParameter width = new ClampedFloatParameter(15.0f, 0.01f, 20.0f);
+        public ClampedFloatParameter OtherAbsorptionScale = new ClampedFloatParameter(OtherAbsorptionRaw.g, 0.0f, 0.2f);
+        public ColorParameter OtherAbsorption = new ColorParameter(OtherAbsorptionRaw * (1.0f / OtherAbsorptionRaw.g), false, false, true);
+        [AdditionalProperty] public ClampedFloatParameter TipAltitude = new ClampedFloatParameter(25.0f, 0.0f, 60.0f);
+        [AdditionalProperty] public ClampedFloatParameter TipValue = new ClampedFloatParameter(1.0f, 0.0f, 1.0f);
+        [AdditionalProperty] public ClampedFloatParameter Width = new ClampedFloatParameter(15.0f, 0.01f, 20.0f);
 
         [Header("Art Direction")] 
-        public ColorParameter skyLuminanceFactor = new ColorParameter(Color.white, false, false,true);
-        public ColorParameter skyAndAerialPerspectiveLuminanceFactor = new ColorParameter(Color.white, false, false, true);
-        public ClampedFloatParameter aerialPespectiveViewDistanceScale = new ClampedFloatParameter(1.0f, 0.0f, 3.0f);
-        public ClampedFloatParameter heightFogContribution = new ClampedFloatParameter(0.1f, 0.0f, 1.0f);
-        public ClampedFloatParameter transmittanceMinLightElevationAngle = new ClampedFloatParameter(-90.0f, -90.0f, 90.0f);
-        public ClampedFloatParameter aerialPerspectiveStartDepth = new ClampedFloatParameter(0.1f, 0.001f, 10.0f);
+        public ColorParameter SkyLuminanceFactor = new ColorParameter(Color.white, false, false,true);
+        public ColorParameter SkyAndAerialPerspectiveLuminanceFactor = new ColorParameter(Color.white, false, false, true);
+        public ClampedFloatParameter AerialPespectiveViewDistanceScale = new ClampedFloatParameter(1.0f, 0.0f, 3.0f);
+        public ClampedFloatParameter HeightFogContribution = new ClampedFloatParameter(0.1f, 0.0f, 1.0f);
+        public ClampedFloatParameter TransmittanceMinLightElevationAngle = new ClampedFloatParameter(-90.0f, -90.0f, 90.0f);
+        public ClampedFloatParameter AerialPerspectiveStartDepth = new ClampedFloatParameter(0.1f, 0.001f, 10.0f);
         
         internal static bool IsSkyAtmosphereEnabled()
         {
             var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
             return skyAtmosphere != null && skyAtmosphere.enable.value;
         }
+        
+        private FAtmosphereSetup atmosphereSetup = new FAtmosphereSetup();
+
+        internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb)
+        {
+            void TentToCoefficients(float TipAltitude, float TipValue, float Width, ref float LayerWidth, ref float LinTerm0, ref float LinTerm1, ref float ConstTerm0, ref float ConstTerm1)
+            {
+                if (Width > 0.0f && TipValue > 0.0f)
+                {
+                    float px = TipAltitude;
+                    float py = TipValue;
+                    float slope = TipValue / Width;
+                    LayerWidth = px;
+                    LinTerm0 = slope;
+                    LinTerm1 = -slope;
+                    ConstTerm0 = py - px * LinTerm0;
+                    ConstTerm1 = py - px * LinTerm1;
+                }
+                else
+                {
+                    LayerWidth = 0.0f;
+                    LinTerm0 = 0.0f;
+                    LinTerm1 = 0.0f;
+                    ConstTerm0 = 0.0f;
+                    ConstTerm1 = 0.0f;
+                }
+            }
+
+            atmosphereSetup.MToSkyUnit = 0.001f;
+            atmosphereSetup.SkyUnitToM = 1.0f / 0.001f;
+            
+            atmosphereSetup.BottomRadiusKm = BottomRadius.value;
+            atmosphereSetup.TopRadiusKm = BottomRadius.value + Mathf.Max(0.1f, AtmosphereHeight.value);
+            atmosphereSetup.GroundAlbedo = GroundAlbedo.value;
+            atmosphereSetup.MultiScatteringFactor = Mathf.Clamp(MultiScatteringFactor.value, 0.0f, 100.0f);
+            
+            // Rayleigh scattering
+            {
+                atmosphereSetup.RayleighScattering = RayleighScattering.value * RayleighScatteringScale.value;
+                atmosphereSetup.RayleighDensityExpScale = -1.0f / RayleighExponentialDistribution.value;
+            }
+            
+            // Mie scattering
+            {
+                atmosphereSetup.MieScattering = MieScattering.value * MieScatteringScale.value;
+                atmosphereSetup.MieAbsorption = MieAbsorption.value * MieAbsorptionScale.value;
+
+                atmosphereSetup.MieExtinction = atmosphereSetup.MieScattering + atmosphereSetup.MieAbsorption;
+                atmosphereSetup.MiePhaseG = MieAnisotropy.value;
+                atmosphereSetup.MieDensityExpScale = -1.0f / MieExponentialDistribution.value;
+            }
+            
+            // Ozone
+            {
+                atmosphereSetup.AbsorptionExtinction = OtherAbsorption.value * OtherAbsorptionScale.value;
+                TentToCoefficients(TipAltitude.value, TipValue.value, Width.value, ref atmosphereSetup.AbsorptionDensity0LayerWidth,
+                    ref atmosphereSetup.AbsorptionDensity0LinearTerm, ref atmosphereSetup.AbsorptionDensity1LinearTerm,
+                    ref atmosphereSetup.AbsorptionDensity0ConstantTerm, ref atmosphereSetup.AbsorptionDensity1ConstantTerm);
+            }
+
+            atmosphereSetup.TransmittanceMinLightElevationAngle = TransmittanceMinLightElevationAngle.value;
+
+            switch (TransforMode.value)
+            {
+                case ESkyAtmosphereTransformMode.PlanetTopAtAbsoluteWorldOrigin:
+                    atmosphereSetup.PlanetCenterKm = new Vector3(0.0f, -atmosphereSetup.BottomRadiusKm, 0.0f);
+                    break;
+                case ESkyAtmosphereTransformMode.PlanetTopAtComponentTransform:
+                    var volumes = FindObjectsByType<Volume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                    foreach (var volume in volumes)
+                    {
+                        foreach (var component in volume.profile.components)
+                        {
+                            if (component is SkyAtmosphere && component == this)
+                            {
+                                atmosphereSetup.PlanetCenterKm = new Vector3(0.0f, -atmosphereSetup.BottomRadiusKm, 0.0f) + volume.transform.position * atmosphereSetup.MToSkyUnit;
+                            }
+                        }
+                    }
+                    break;
+                case ESkyAtmosphereTransformMode.PlanetCenterAtComponentTransform:
+                    volumes = FindObjectsByType<Volume>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                    foreach (var volume in volumes)
+                    {
+                        foreach (var component in volume.profile.components)
+                        {
+                            if (component is SkyAtmosphere && component == this)
+                            {
+                                atmosphereSetup.PlanetCenterKm = volume.transform.position * atmosphereSetup.MToSkyUnit;
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            cb.MultiScatteringFactor = atmosphereSetup.MultiScatteringFactor;
+            cb.BottomRadiusKm = atmosphereSetup.BottomRadiusKm;
+            cb.TopRadiusKm = atmosphereSetup.TopRadiusKm;
+            cb.RayleighDensityExpScale = atmosphereSetup.RayleighDensityExpScale;
+            cb.RayleighScattering = atmosphereSetup.RayleighScattering;
+            cb.MieScattering = atmosphereSetup.MieScattering;
+            cb.MieDensityExpScale = atmosphereSetup.MieDensityExpScale;
+            cb.MieExtinction = atmosphereSetup.MieExtinction;
+            cb.MiePhaseG = atmosphereSetup.MiePhaseG;
+            cb.MieAbsorption = atmosphereSetup.MieAbsorption;
+            cb.AbsorptionDensity0LayerWidth = atmosphereSetup.AbsorptionDensity0LayerWidth;
+            cb.AbsorptionDensity0ConstantTerm = atmosphereSetup.AbsorptionDensity0ConstantTerm;
+            cb.AbsorptionDensity0LinearTerm = atmosphereSetup.AbsorptionDensity0LinearTerm;
+            cb.AbsorptionDensity1ConstantTerm = atmosphereSetup.AbsorptionDensity1ConstantTerm;
+            cb.AbsorptionDensity1LinearTerm = atmosphereSetup.AbsorptionDensity1LinearTerm;
+            cb.AbsorptionExtinction = atmosphereSetup.AbsorptionExtinction;
+            cb.GroundAlbedo = atmosphereSetup.GroundAlbedo;
+        }
     }
 
-    public enum TransformMode
+    struct FAtmosphereSetup
+    {
+        //////////////////////////////////////////////// Runtime
+        public float MToSkyUnit;            // Meters to Kilometers
+        public float SkyUnitToM;	    // Kilometers to Meters
+        
+        public Vector3 PlanetCenterKm;		// In sky unit (kilometers)
+        public float BottomRadiusKm;			// idem
+        public float TopRadiusKm;				// idem
+        
+        public float MultiScatteringFactor;
+
+        public Color RayleighScattering;// Unit is 1/km
+        public float RayleighDensityExpScale;
+        
+        public Color MieScattering;		// Unit is 1/km
+        public Color MieExtinction;		// idem
+        public Color MieAbsorption;		// idem
+        public float MieDensityExpScale;
+        public float MiePhaseG;
+        
+        public Color AbsorptionExtinction;
+        public float AbsorptionDensity0LayerWidth;
+        public float AbsorptionDensity0ConstantTerm;
+        public float AbsorptionDensity0LinearTerm;
+        public float AbsorptionDensity1ConstantTerm;
+        public float AbsorptionDensity1LinearTerm;
+        
+        public Color GroundAlbedo;
+        public float TransmittanceMinLightElevationAngle;
+    }
+
+    public enum ESkyAtmosphereTransformMode
     {
         PlanetTopAtAbsoluteWorldOrigin,
         PlanetTopAtComponentTransform,
@@ -74,8 +220,8 @@ namespace UnityEngine.Rendering.Universal
     }
     
     [Serializable]
-    public sealed class TransformModeParameter : VolumeParameter<TransformMode>
+    public sealed class SkyAtmosphereTransformMode : VolumeParameter<ESkyAtmosphereTransformMode>
     {
-        public TransformModeParameter(TransformMode value, bool overrideState = false) : base(value, overrideState) { }
+        public SkyAtmosphereTransformMode(ESkyAtmosphereTransformMode value, bool overrideState = false) : base(value, overrideState) { }
     }
 }

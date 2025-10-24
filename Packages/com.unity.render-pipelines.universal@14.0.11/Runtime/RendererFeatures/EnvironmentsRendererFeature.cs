@@ -19,8 +19,6 @@ namespace UnityEngine.Rendering.Universal
     {
         public EnvironmentsData environmentsData;
         
-        public bool highQualityMultiScattering = false;
-        
         public bool lightShafts = true;
         public lightShaftsDownsampleMode lightShaftsDownsample = lightShaftsDownsampleMode.Half;
         
@@ -117,7 +115,7 @@ namespace UnityEngine.Rendering.Universal
             }
 #endif
             
-            m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass();
+            m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData);
             
             if (volumetricLighting)
             {
@@ -234,8 +232,7 @@ namespace UnityEngine.Rendering.Universal
 
             if (enableSkyAtmosphere)
             {
-                bool secondAtmosphereLightEnabled = renderingData.lightData is { additionalLightsCount: > 0 } && renderingData.lightData.visibleLights[1].lightType == LightType.Directional;
-                m_SkyAtmosphereLookUpTablesPass.Setup(highQualityMultiScattering, secondAtmosphereLightEnabled);
+                m_SkyAtmosphereLookUpTablesPass.Setup();
             }
             
             if (enableFog)
@@ -327,7 +324,6 @@ namespace UnityEngine.Rendering.Universal
             m_LightShaftsBloomPass?.Dispose();
             m_LightShaftsBloomPass = null;
             _frameIndex = 0;
-            // vBufferParams = null;
         }
         
         void InitializeVolumetricLighting()
@@ -520,6 +516,10 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int _LightShaftsBloomTexture = Shader.PropertyToID("_LightShaftsBloomTexture");
         public static readonly int _BloomMaxBrightness = Shader.PropertyToID("_BloomMaxBrightness");
         public static readonly int _BloomTintAndThreshold = Shader.PropertyToID("_BloomTintAndThreshold");
+        
+        // Atmosphere
+        public static readonly int _TransmittanceLutUAV = Shader.PropertyToID("_TransmittanceLutUAV");
+        public static readonly int _MultiScatteredLuminanceLutUAV = Shader.PropertyToID("_MultiScatteredLuminanceLutUAV");
     }
     
     internal struct ShaderVariablesEnvironments
@@ -546,50 +546,70 @@ namespace UnityEngine.Rendering.Universal
         public float _VBufferRcpSliceCount;
         public float _VBufferRcpInstancedViewCount;  // Used to remap VBuffer coordinates for XR
         public float _VBufferLastSliceDist;          // The distance to the middle of the last slice
+        
+        // SkyAtmosphere
+        public float MultiScatteringFactor;
+        public float BottomRadiusKm;
+        public float TopRadiusKm;
+        public float RayleighDensityExpScale;
+        public Vector4 RayleighScattering;
+        public Vector4 MieScattering;
+        public Vector4 MieExtinction;
+        public Vector4 MieAbsorption;
+        public Vector4 AbsorptionExtinction;
+        public Vector4 GroundAlbedo;
+        public float MieDensityExpScale;
+        public float MiePhaseG;
+        public float AbsorptionDensity0LayerWidth;
+        public float AbsorptionDensity0ConstantTerm;
+        public float AbsorptionDensity0LinearTerm;
+        public float AbsorptionDensity1ConstantTerm;
+        public float AbsorptionDensity1LinearTerm;
+        
+        // SkyAtmosphere Internal Common Parameters
+        public float SampleCountMin;
+        public float SampleCountMax;
+        public float DistanceToSampleCountMaxInv;
+
+        public float FastSkySampleCountMin;
+        public float FastSkySampleCountMax;
+        public float FastSkyDistanceToSampleCountMaxInv;
+
+        public float CameraAerialPerspectiveVolumeDepthResolution;
+        public float CameraAerialPerspectiveVolumeDepthResolutionInv;
+        public float CameraAerialPerspectiveVolumeDepthSliceLengthKm;
+        public Vector4 CameraAerialPerspectiveVolumeSizeAndInvSize;
+        public float CameraAerialPerspectiveVolumeDepthSliceLengthKmInv;
+        public float CameraAerialPerspectiveSampleCountPerSlice;
+
+        public float TransmittanceSampleCount;
+        public float MultiScatteringSampleCount;
+        
+        public Vector4 TransmittanceLutSizeAndInvSize;
+        public Vector4 MultiScatteredLuminanceLutSizeAndInvSize;
+        public Vector4 SkyViewLutSizeAndInvSize;
+        
+        public Vector4 SkyLuminanceFactor;
+        public Vector4 SkyAndAerialPerspectiveLuminanceFactor;
+        
+        public float AerialPespectiveViewDistanceScale;
+        public float FogShowFlagFactor;
     }
     
     internal static class EnvironmentsUtils
     {
-        static void UpdateShaderVariablesGlobalVolumetrics(ref ShaderVariablesEnvironments cb, CameraData cameraData, in VBufferParameters[] vBufferParams, in Vector3Int s_CurrentVolumetricBufferSize)
-        {
-            if (!Fog.IsVolumetricFogEnabled(cameraData))
-            {
-                return;
-            }
-            
-            uint frameIndex = (uint)EnvironmentsRendererFeature.frameIndex;
-            uint currIdx = (frameIndex + 0) & 1;
-
-            var currParams = vBufferParams[currIdx];
-
-            // The lighting & density buffers are shared by all cameras.
-            // The history & feedback buffers are specific to the camera.
-            // These 2 types of buffers can have different sizes.
-            // Additionally, history buffers can have different sizes, since they are not resized at the same time.
-            var cvp = currParams.viewportSize;
-
-            // Adjust slices for XR rendering: VBuffer is shared for all single-pass views
-            uint sliceCount = (uint)(cvp.z / 1);
-
-            cb._VBufferViewportSize = new Vector4(cvp.x, cvp.y, 1.0f / cvp.x, 1.0f / cvp.y);
-            cb._VBufferSliceCount = sliceCount;
-            cb._VBufferRcpSliceCount = 1.0f / sliceCount;
-            cb._VBufferLightingViewportScale = currParams.ComputeViewportScale(s_CurrentVolumetricBufferSize);
-            cb._VBufferLightingViewportLimit = currParams.ComputeViewportLimit(s_CurrentVolumetricBufferSize);
-            cb._VBufferDistanceEncodingParams = currParams.depthEncodingParams;
-            cb._VBufferDistanceDecodingParams = currParams.depthDecodingParams;
-            cb._VBufferLastSliceDist = currParams.ComputeLastSliceDistance(sliceCount);
-            cb._VBufferRcpInstancedViewCount = 1.0f / 1;
-        }
         internal static void UpdateShaderVariablesEnvironmentsCB(ref ShaderVariablesEnvironments cb, RenderingData renderingData, VBufferParameters[] vBufferParams, Vector3Int s_CurrentVolumetricBufferSize, bool enableLightShafts, bool enableVolumetricFog)
         {
             var universalCamera = renderingData.cameraData;
-            bool isMainLightingExists = renderingData.lightData.mainLightIndex >= 0;
-            var fogSettings = VolumeManager.instance.stack.GetComponent<Fog>();
             
-            fogSettings.UpdateShaderVariablesEnvironmentsCBFogParameters(ref cb, universalCamera, isMainLightingExists, enableLightShafts, enableVolumetricFog);
-
-            UpdateShaderVariablesGlobalVolumetrics(ref cb, universalCamera, vBufferParams, s_CurrentVolumetricBufferSize);
+            bool isMainLightingExists = renderingData.lightData.mainLightIndex >= 0;
+            var fog = VolumeManager.instance.stack.GetComponent<Fog>();
+            fog.UpdateShaderVariablesEnvironmentsCBFogParameters(ref cb, universalCamera, isMainLightingExists, enableLightShafts, enableVolumetricFog);
+            VolumetricLightingUtils.UpdateShaderVariablesGlobalVolumetrics(ref cb, universalCamera, vBufferParams, s_CurrentVolumetricBufferSize);
+            
+            var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
+            skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb);
+            SkyAtmosphereUtils.SetupSkyAtmosphereInternalCommonParameters(ref cb, skyAtmosphere, renderingData.cameraData);
         }
     }
 }
