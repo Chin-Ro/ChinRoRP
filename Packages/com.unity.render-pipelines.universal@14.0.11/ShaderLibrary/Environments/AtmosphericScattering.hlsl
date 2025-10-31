@@ -136,7 +136,7 @@ float4 EvaluateAtmosphericScattering(PositionInputs posInput, float3 V, float2 s
 #elif defined(_ALPHAMODULATE_ON)
     result.rgb = result.rgb * (1.0 - volOpacity) + volOpacity;
 #else
-    result.rgb = result.rgb * (1 - volOpacity) + volColor * result.a;
+    result.rgb = result.rgb * (1 - volOpacity) + volColor * volOpacity;
 #endif
 
     return result;

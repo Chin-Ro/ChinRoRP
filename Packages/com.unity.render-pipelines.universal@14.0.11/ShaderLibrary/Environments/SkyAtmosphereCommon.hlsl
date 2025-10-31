@@ -5,6 +5,8 @@
 
 #define M_TO_SKY_UNIT 0.001f
 #define SKY_UNIT_TO_CM (1.0f / M_TO_SKY_UNIT)
+// Float accuracy offset in Sky unit (km, so this is 1m). Should match the one in FAtmosphereSetup::ComputeViewData
+#define PLANET_RADIUS_OFFSET 0.001f
 
 void fromTransmittanceLutUVs(
     out float ViewHeight, out float ViewZenithCosAngle,
@@ -22,6 +24,25 @@ void fromTransmittanceLutUVs(
     float D = Dmin + Xmu * (Dmax - Dmin);
     ViewZenithCosAngle = D == 0.0f ? 1.0f : (H * H - Rho * Rho - D * D) / (2.0f * ViewHeight * D);
     ViewZenithCosAngle = clamp(ViewZenithCosAngle, -1.0f, 1.0f);
+}
+
+void getTransmittanceLutUvs(
+	in float viewHeight, in float viewZenithCosAngle, in float BottomRadius, in float TopRadius,
+	out float2 UV)
+{
+	float H = sqrt(max(0.0f, TopRadius * TopRadius - BottomRadius * BottomRadius));
+	float Rho = sqrt(max(0.0f, viewHeight * viewHeight - BottomRadius * BottomRadius));
+
+	float Discriminant = viewHeight * viewHeight * (viewZenithCosAngle * viewZenithCosAngle - 1.0f) + TopRadius * TopRadius;
+	float D = max(0.0f, (-viewHeight * viewZenithCosAngle + sqrt(Discriminant))); // Distance to atmosphere boundary
+
+	float Dmin = TopRadius - viewHeight;
+	float Dmax = Rho + H;
+	float Xmu = (D - Dmin) / (Dmax - Dmin);
+	float Xr = Rho / H;
+
+	UV = float2(Xmu, Xr);
+	//UV = float2(fromUnitToSubUvs(UV.x, TRANSMITTANCE_TEXTURE_WIDTH), fromUnitToSubUvs(UV.y, TRANSMITTANCE_TEXTURE_HEIGHT)); // No real impact so off
 }
 
 /**

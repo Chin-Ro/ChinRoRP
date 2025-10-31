@@ -65,7 +65,7 @@ Shader "Universal Render Pipeline/Unlit"
             // Material Keywords
             #pragma shader_feature_local_fragment _SURFACE_TYPE_TRANSPARENT
             #pragma shader_feature_local_fragment _ALPHATEST_ON
-            #pragma shader_feature_local_fragment _ALPHAMODULATE_ON
+            #pragma shader_feature_local_fragment _ _ALPHAPREMULTIPLY_ON _ALPHAADDITIVE_ON _ALPHAMODULATE_ON
 
             // -------------------------------------
             // Unity defined keywords

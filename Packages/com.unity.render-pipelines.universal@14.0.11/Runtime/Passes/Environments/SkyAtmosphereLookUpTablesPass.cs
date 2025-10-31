@@ -1,25 +1,50 @@
 ﻿
+using System.Runtime.InteropServices;
 using UnityEngine.Experimental.Rendering;
 
 namespace UnityEngine.Rendering.Universal
 {
     public class SkyAtmosphereLookUpTablesPass : ScriptableRenderPass
     {
-        private FSkyAtmosphereInternalCommonParameters InternalCommonParameters = new FSkyAtmosphereInternalCommonParameters();
+        private const int GroupSize = 8;
+        const float GroupSizeInv = 1.0f / GroupSize;
 
         private RTHandle TransmittanceLut;
         private RTHandle MultiScatteredLuminanceLut;
         
-        private RenderTextureDescriptor descriptor = new RenderTextureDescriptor();
+        private RenderTextureDescriptor descriptor;
 
         private ComputeShader m_SkyAtmosphereLookUpTablesCS;
         private int m_TransmittanceLutKernel;
         private int m_RenderMultiScatteredLuminanceLutKernel;
+
+        private ComputeBuffer UniformSphereSamplesBuffer = new ComputeBuffer(GroupSize * GroupSize, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured, ComputeBufferMode.Immutable);
+        private Vector4[] Dest = new Vector4[GroupSize * GroupSize];
         
         public SkyAtmosphereLookUpTablesPass(EnvironmentsData data)
         {
             renderPassEvent = RenderPassEvent.BeforeRenderingGbuffer;
             m_SkyAtmosphereLookUpTablesCS = data.skyAtmosphereLookUpTablesCS;
+            
+            for (uint i = 0; i < GroupSize; ++i)
+            {
+                for (uint j = 0; j < GroupSize; ++j)
+                {
+                    float u0 = (i + Random.Range(0f, 1f)) * GroupSizeInv;
+                    float u1 = (j + Random.Range(0f, 1f)) * GroupSizeInv;
+                    
+                    float a = 1.0f - 2.0f * u0;
+                    float b = Mathf.Sqrt(1.0f - a * a);
+                    float phi = 2 * Mathf.PI * u1;
+
+                    uint idx = j * GroupSize + i;
+                    Dest[idx].x = b * Mathf.Cos(phi);
+                    Dest[idx].y = b * Mathf.Sin(phi);
+                    Dest[idx].z = a;
+                    Dest[idx].w = 0.0f;
+                }
+            }
+            UniformSphereSamplesBuffer.SetData(Dest);
         }
         
         public void Setup()
@@ -66,14 +91,21 @@ namespace UnityEngine.Rendering.Universal
             using (new ProfilingScope(cmd, new ProfilingSampler("SkyAtmosphere LookUpTables")))
             {
                 // Transmittance LUT
-                int threadGroupX = UniversalUtils.DivRoundUp(TransmittanceLut.rt.width, 8);
-                int threadGroupY = UniversalUtils.DivRoundUp(TransmittanceLut.rt.height, 8);
+                int threadGroupX = UniversalUtils.DivRoundUp(TransmittanceLut.rt.width, GroupSize);
+                int threadGroupY = UniversalUtils.DivRoundUp(TransmittanceLut.rt.height, GroupSize);
+                
                 cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, EnvironmentConstants._TransmittanceLutUAV, TransmittanceLut);
                 cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, threadGroupX, threadGroupY, 1);
                 
                 // Multi-Scattering LUT
                 CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "HIGHQUALITY_MULTISCATTERING_APPROX_ENABLED", bHighQualityMultiScattering);
+                cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, EnvironmentConstants._UniformSphereSamplesBuffer, UniformSphereSamplesBuffer);
+                cmd.SetComputeIntParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._UniformSphereSamplesBufferSampleCount, GroupSize);
                 cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, EnvironmentConstants._MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
+                cmd.SetGlobalTexture(EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, threadGroupX, threadGroupY, 1);
+                
+                // Distant Sky Light LUT
             }
         }
         
@@ -81,6 +113,7 @@ namespace UnityEngine.Rendering.Universal
         {
             TransmittanceLut?.Release();
             MultiScatteredLuminanceLut?.Release();
+            CoreUtils.SafeRelease(UniformSphereSamplesBuffer);
         }
     }
 }

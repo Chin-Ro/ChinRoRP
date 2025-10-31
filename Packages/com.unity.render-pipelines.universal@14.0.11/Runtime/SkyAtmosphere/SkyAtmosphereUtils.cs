@@ -134,9 +134,4 @@
             return value < minValue ? minValue : value;
         }
     }
-    
-    struct FSkyAtmosphereInternalCommonParameters
-    {
-        
-    };
 }

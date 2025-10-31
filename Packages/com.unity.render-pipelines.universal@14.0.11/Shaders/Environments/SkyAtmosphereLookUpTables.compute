@@ -8,25 +8,54 @@
 #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
 
 #pragma kernel RenderTransmittanceLutCS RENDER_TRANSMITTANCELUT
+#pragma kernel RenderMultiScatteredLuminanceLutCS RENDER_MULTISCATTEREDLUMINANCELUT
 
 #pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
+#pragma multi_compile _ HIGHQUALITY_MULTISCATTERING_APPROX_ENABLED
 
 #if RENDER_TRANSMITTANCELUT
-#define THREADGROUP_SIZE 8
-#define WHITE_TRANSMITTANCE 1
-#define TRANSMITTANCE_PASS  1
+    #define THREADGROUP_SIZE 8
+    #define WHITE_TRANSMITTANCE 1
+    #define TRANSMITTANCE_PASS  1
+#endif
+
+#if RENDER_MULTISCATTEREDLUMINANCELUT
+    #define THREADGROUP_SIZE 8
+    #define MULTISCATT_PASS 1
 #endif
 
 // View data is not available for passes running once per scene (and not once per view).
 #define VIEWDATA_AVAILABLE (TRANSMITTANCE_PASS!=1 && MULTISCATT_PASS!=1 && SKYLIGHT_PASS!=1)
 
-#ifndef THREADGROUP_SIZE
-#define THREADGROUP_SIZE 1
-#endif
-
 #ifndef PER_PIXEL_NOISE
 #define PER_PIXEL_NOISE 0
 #endif
+
+// - RayOrigin: ray origin
+// - RayDir: normalized ray direction
+// - SphereCenter: sphere center
+// - SphereRadius: sphere radius
+// - Returns distance from RayOrigin to closest intersecion with sphere,
+//   or -1.0 if no intersection.
+float RaySphereIntersectNearest(float3 RayOrigin, float3 RayDir, float3 SphereCenter, float SphereRadius)
+{
+    float2 Sol = RayIntersectSphere(RayOrigin, RayDir, float4(SphereCenter, SphereRadius));
+    float Sol0 = Sol.x;
+    float Sol1 = Sol.y;
+    if (Sol0 < 0.0f && Sol1 < 0.0f)
+    {
+        return -1.0f;
+    }
+    if (Sol0 < 0.0f)
+    {
+        return max(0.0f, Sol1);
+    }
+    else if (Sol1 < 0.0f)
+    {
+        return max(0.0f, Sol0);
+    }
+    return max(0.0f, min(Sol0, Sol1));
+}
 
 ////////////////////////////////////////////////////////////
 // Utilities
@@ -44,7 +73,8 @@
 #define OutputPreExposure		1.0f
 #endif
 
-RW_TEXTURE2D(float3, _TransmittanceLutUAV);
+TEXTURE2D(_TransmittanceLutTexture);
+SAMPLER(sampler_LinearClamp);
 
 ////////////////////////////////////////////////////////////
 // LUT functions
@@ -60,33 +90,33 @@ void UvToLutTransmittanceParams(out float ViewHeight, out float ViewZenithCosAng
     fromTransmittanceLutUVs(ViewHeight, ViewZenithCosAngle, BottomRadiusKm, TopRadiusKm, UV);
 }
 
-// void LutTransmittanceParamsToUv(in float ViewHeight, in float ViewZenithCosAngle, out float2 UV)
-// {
-//     getTransmittanceLutUvs(ViewHeight, ViewZenithCosAngle, BottomRadiusKm, TopRadiusKm, UV);
-// }
-//
-// float3 GetTransmittance(in float LightZenithCosAngle, in float PHeight)
-// {
-//     float2 UV;
-//     LutTransmittanceParamsToUv(PHeight, LightZenithCosAngle, UV);
-//     #ifdef WHITE_TRANSMITTANCE
-//     float3 TransmittanceToLight = 1.0f;
-//     #else
-//     float3 TransmittanceToLight = TransmittanceLutTexture.SampleLevel(TransmittanceLutTextureSampler, UV, 0).rgb;
-//     #endif
-//     return TransmittanceToLight;
-// }
+void LutTransmittanceParamsToUv(in float ViewHeight, in float ViewZenithCosAngle, out float2 UV)
+{
+    getTransmittanceLutUvs(ViewHeight, ViewZenithCosAngle, BottomRadiusKm, TopRadiusKm, UV);
+}
+
+float3 GetTransmittance(in float LightZenithCosAngle, in float PHeight)
+{
+    float2 UV;
+    LutTransmittanceParamsToUv(PHeight, LightZenithCosAngle, UV);
+#ifdef WHITE_TRANSMITTANCE
+    float3 TransmittanceToLight = 1.0f;
+#else
+    float3 TransmittanceToLight = SAMPLE_TEXTURE2D_LOD(_TransmittanceLutTexture, sampler_LinearClamp, UV, 0).rgb;
+#endif
+    return TransmittanceToLight;
+}
 
 #define DEFAULT_SAMPLE_OFFSET 0.3f
 float SkyAtmosphereNoise(float2 UV)
 {
     //	return DEFAULT_SAMPLE_OFFSET;
     //	return float(Rand3DPCG32(int3(UV.x, UV.y, S)).x) / 4294967296.0f;
-    #if VIEWDATA_AVAILABLE && PER_PIXEL_NOISE
+#if VIEWDATA_AVAILABLE && PER_PIXEL_NOISE
     return View.RealTimeReflectionCapture ? DEFAULT_SAMPLE_OFFSET : InterleavedGradientNoise(UV.xy, float(View.StateFrameIndexMod8));
-    #else
+#else
     return DEFAULT_SAMPLE_OFFSET;
-    #endif
+#endif
 }
 
 ////////////////////////////////////////////////////////////
@@ -183,29 +213,29 @@ SingleScatteringResult IntegrateSingleScatteredLuminance(
         }
     }
 #else // SAMPLE_ATMOSPHERE_ON_CLOUDS
-    if (DeviceZ != FarDepthValue)
-    {
-        // const float3 DepthBufferTranslatedWorldPosKm = ComputeWorldSpacePosition(SVPos.xy, DeviceZ, UNITY_MATRIX_I_VP).xyz * M_TO_SKY_UNIT;
-        // const float3 TraceStartTranslatedWorldPosKm  = WorldPos + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz * M_TO_SKY_UNIT; // apply planet offset to go back to world from planet local referencial.
-        // const float3 TraceStartToSurfaceWorldKm = DepthBufferTranslatedWorldPosKm - TraceStartTranslatedWorldPosKm;
-        // float tDepth = length(TraceStartToSurfaceWorldKm);
-        // if (tDepth < tMax)
-        // {
-        //     tMax = tDepth;
-        // }
-        // else
-        // {
-        //     // Artists did not like that we handle automatic hiding of opaque element behind the planet.
-        //     // Now, pixel under the surface of earht will receive aerial perspective as if they were  on the ground.
-        //     //PlanetOnOpaque = 0.0;
-        // }
-        //
-        // //if the ray intersects with the atmosphere boundary, make sure we do not apply atmosphere on surfaces are front of it. 
-        // if (dot(WorldDir, TraceStartToSurfaceWorldKm) < 0.0)
-        // {
-        //     return Result;
-        // }
-    }
+    // if (DeviceZ != FarDepthValue)
+    // {
+    //     const float3 DepthBufferTranslatedWorldPosKm = ComputeWorldSpacePosition(SVPos.xy, DeviceZ, UNITY_MATRIX_I_VP).xyz * M_TO_SKY_UNIT;
+    //     const float3 TraceStartTranslatedWorldPosKm  = WorldPos + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz * M_TO_SKY_UNIT; // apply planet offset to go back to world from planet local referencial.
+    //     const float3 TraceStartToSurfaceWorldKm = DepthBufferTranslatedWorldPosKm - TraceStartTranslatedWorldPosKm;
+    //     float tDepth = length(TraceStartToSurfaceWorldKm);
+    //     if (tDepth < tMax)
+    //     {
+    //         tMax = tDepth;
+    //     }
+    //     else
+    //     {
+    //         // Artists did not like that we handle automatic hiding of opaque element behind the planet.
+    //         // Now, pixel under the surface of earht will receive aerial perspective as if they were  on the ground.
+    //         //PlanetOnOpaque = 0.0;
+    //     }
+    //     
+    //     //if the ray intersects with the atmosphere boundary, make sure we do not apply atmosphere on surfaces are front of it. 
+    //     if (dot(WorldDir, TraceStartToSurfaceWorldKm) < 0.0)
+    //     {
+    //         return Result;
+    //     }
+    // }
 #endif // SAMPLE_ATMOSPHERE_ON_CLOUDS
 #endif
 
@@ -230,7 +260,6 @@ SingleScatteringResult IntegrateSingleScatteredLuminance(
     float cosTheta = dot(wi, wo);
     float MiePhaseValueLight0 = HenyeyGreensteinPhase(MiePhaseG, -cosTheta);	// negate cosTheta because due to WorldDir being a "in" direction. 
     float RayleighPhaseValueLight0 = RayleighPhase(cosTheta);
-
 #if SECOND_ATMOSPHERE_LIGHT_ENABLED
     cosTheta = dot(Light1Dir, wo);
     float MiePhaseValueLight1 = HenyeyGreensteinPhase(MiePhaseG, -cosTheta);	// negate cosTheta because due to WorldDir being a "in" direction. 
@@ -253,12 +282,14 @@ SingleScatteringResult IntegrateSingleScatteredLuminance(
     float3 ExposedLight1Illuminance = Light1Illuminance * OutputPreExposure;
 #endif
 
+//#if SAMPLE_OPAQUE_SHADOW
+    // Get the referencial when rendering the SkyView lut being in a special Z-top space
 #if SKYVIEWLUT_PASS
     float3x3 LocalReferencial = GetSkyViewLutReferential(View.SkyViewLutReferential);
 #endif
-
+//#endif
+    
     float PixelNoise = PER_PIXEL_NOISE ? SkyAtmosphereNoise(PixPos.xy) : DEFAULT_SAMPLE_OFFSET;
-
     for (float SampleI = 0.0f; SampleI < SampleCount; SampleI += 1.0f)
     {
         // Compute current ray t and sample point P
@@ -297,40 +328,211 @@ SingleScatteringResult IntegrateSingleScatteredLuminance(
         const float3 SampleTransmittance = exp(-SampleOpticalDepth);
         OpticalDepth += SampleOpticalDepth;
 
-        // // Transmittance Ray only and Mie only set half of ozone in rayleigh and half of ozone in mie parts.
-        // // This is not great but I do not have any better solution. 
-        // // Also most of the time Ozone is high in the atmosphere so it should be fine this way.
-        // ThroughputMieOnly *= exp(-(Medium.ExtinctionMie + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
-        // ThroughputRayOnly *= exp(-(Medium.ExtinctionRay + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
-        //
-        // // Phase and transmittance for light 0
-        // const float3 UpVector = P / PHeight;
-        // float Light0ZenithCosAngle = dot(Light0Dir, UpVector);
-        // float3 TransmittanceToLight0 = GetTransmittance(Light0ZenithCosAngle, PHeight);
-        // float3 PhaseTimesScattering0;
-        // float3 PhaseTimesScattering0MieOnly;
-        // float3 PhaseTimesScattering0RayOnly;
-        // if (MieRayPhase)
-        // {
-        //     PhaseTimesScattering0MieOnly= Medium.ScatteringMie * MiePhaseValueLight0;
-        //     PhaseTimesScattering0RayOnly= Medium.ScatteringRay * RayleighPhaseValueLight0;
-        //     PhaseTimesScattering0		= PhaseTimesScattering0MieOnly + PhaseTimesScattering0RayOnly;
-        // }
-        // else
-        // {
-        //     PhaseTimesScattering0MieOnly= Medium.ScatteringMie * uniformPhase;
-        //     PhaseTimesScattering0RayOnly= Medium.ScatteringRay * uniformPhase;
-        //     PhaseTimesScattering0		= Medium.Scattering * uniformPhase;
-        // }
+        // Transmittance Ray only and Mie only set half of ozone in rayleigh and half of ozone in mie parts.
+        // This is not great but I do not have any better solution. 
+        // Also most of the time Ozone is high in the atmosphere so it should be fine this way.
+        ThroughputMieOnly *= exp(-(Medium.ExtinctionMie + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
+        ThroughputRayOnly *= exp(-(Medium.ExtinctionRay + Medium.ExtinctionOzo) * dt * AerialPespectiveViewDistanceScale);
+        
+        // Phase and transmittance for light 0
+        const float3 UpVector = P / PHeight;
+        float Light0ZenithCosAngle = dot(Light0Dir, UpVector);
+        float3 TransmittanceToLight0 = GetTransmittance(Light0ZenithCosAngle, PHeight);
+        float3 PhaseTimesScattering0;
+        float3 PhaseTimesScattering0MieOnly;
+        float3 PhaseTimesScattering0RayOnly;
+        if (MieRayPhase)
+        {
+            PhaseTimesScattering0MieOnly= Medium.ScatteringMie * MiePhaseValueLight0;
+            PhaseTimesScattering0RayOnly= Medium.ScatteringRay * RayleighPhaseValueLight0;
+            PhaseTimesScattering0		= PhaseTimesScattering0MieOnly + PhaseTimesScattering0RayOnly;
+        }
+        else
+        {
+            PhaseTimesScattering0MieOnly= Medium.ScatteringMie * uniformPhase;
+            PhaseTimesScattering0RayOnly= Medium.ScatteringRay * uniformPhase;
+            PhaseTimesScattering0		= Medium.Scattering * uniformPhase;
+        }
 
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+        // Phase and transmittance for light 1
+        float Light1ZenithCosAngle = dot(Light1Dir, UpVector);
+        float3 TransmittanceToLight1 = GetTransmittance(Light1ZenithCosAngle, PHeight);
+        float3 PhaseTimesScattering1;
+        float3 PhaseTimesScattering1MieOnly;
+        float3 PhaseTimesScattering1RayOnly;
+        if (MieRayPhase)
+        {
+            PhaseTimesScattering1MieOnly= Medium.ScatteringMie * MiePhaseValueLight1;
+            PhaseTimesScattering1RayOnly= Medium.ScatteringRay * RayleighPhaseValueLight1;
+            PhaseTimesScattering1		= PhaseTimesScattering1MieOnly + PhaseTimesScattering1RayOnly;
+        }
+        else
+        {
+            PhaseTimesScattering1MieOnly= Medium.ScatteringMie * uniformPhase;
+            PhaseTimesScattering1RayOnly= Medium.ScatteringRay * uniformPhase;
+            PhaseTimesScattering1		= Medium.Scattering * uniformPhase;
+        }
+#endif
+
+        // Multiple scattering approximation
+        float3 MultiScatteredLuminance0 = 0.0f;
+#if MULTISCATTERING_APPROX_SAMPLING_ENABLED
+        MultiScatteredLuminance0 = GetMultipleScattering(P, Light0ZenithCosAngle);
+#endif
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+        float3 MultiScatteredLuminance1 = 0.0f;
+    #if MULTISCATTERING_APPROX_SAMPLING_ENABLED
+        MultiScatteredLuminance1 = GetMultipleScattering(P, Light1ZenithCosAngle);
+    #endif
+#endif
+
+        // Planet shadow
+        float tPlanet0 = RaySphereIntersectNearest(P, Light0Dir, PlanetO + PLANET_RADIUS_OFFSET * UpVector, BottomRadiusKm);
+        float PlanetShadow0 = tPlanet0 >= 0.0f ? 0.0f : 1.0f;
+        float3 ShadowP0 = P;
+        bool bUnused = false;
+
+#if SKYVIEWLUT_PASS
+        ShadowP0 = GetTranslatedCameraPlanetPos() + t * mul(LocalReferencial, WorldDir); // Inverse of the local SkyViewLUT referencial transform
+#endif
+        #if SAMPLE_OPAQUE_SHADOW
+        {
+            float3 ShadowSampleWorldPosition0 = ShadowP0 * SKY_UNIT_TO_CM + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz;
+            PlanetShadow0 *= ComputeLight0VolumeShadowing(ShadowSampleWorldPosition0 /* - DFHackToFloat(PrimaryView.PreViewTranslation)*/, false, false, bUnused);
+
+            #if VIRTUAL_SHADOW_MAP
+            if (VirtualShadowMapId0 != INDEX_NONE)
+            {
+                FVirtualShadowMapSampleResult VirtualShadowMapSample = SampleVirtualShadowMapDirectional(VirtualShadowMapId0, ShadowSampleWorldPosition0);
+                PlanetShadow0 *= VirtualShadowMapSample.ShadowFactor;
+            }
+            #endif // VIRTUALSHADOW_MAP
+        }
+        #endif
+#if SAMPLE_CLOUD_SKYAO
+        float OutOpticalDepth = 0.0f;
+        MultiScatteredLuminance0 *= GetCloudVolumetricShadow(ShadowP0 * SKY_UNIT_TO_CM + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz, VolumetricCloudCommonParameters.CloudSkyAOTranslatedWorldToLightClipMatrix,
+            VolumetricCloudCommonParameters.CloudSkyAOFarDepthKm, VolumetricCloudSkyAOTexture, VolumetricCloudSkyAOTextureSampler, OutOpticalDepth);
+#endif
+#if SAMPLE_CLOUD_SHADOW
+        float OutOpticalDepth2 = 0.0f;
+        PlanetShadow0 *= saturate(lerp(1.0f, GetCloudVolumetricShadow(ShadowP0 * SKY_UNIT_TO_CM + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz, VolumetricCloudCommonParameters.CloudShadowmapTranslatedWorldToLightClipMatrix[0],
+            VolumetricCloudCommonParameters.CloudShadowmapFarDepthKm[0].x, VolumetricCloudShadowMapTexture0, VolumetricCloudShadowMapTexture0Sampler, OutOpticalDepth2), VolumetricCloudShadowStrength0));
+#endif
+        // MultiScatteredLuminance is already pre-exposed, atmospheric light contribution needs to be pre exposed
+        // Multi-scattering is also not affected by PlanetShadow or TransmittanceToLight because it contains diffuse light after single scattering.
+        float3 S		= ExposedLight0Illuminance * (PlanetShadow0 * TransmittanceToLight0 * PhaseTimesScattering0			+ MultiScatteredLuminance0 * Medium.Scattering);
+        float3 SMieOnly = ExposedLight0Illuminance * (PlanetShadow0 * TransmittanceToLight0 * PhaseTimesScattering0MieOnly	+ MultiScatteredLuminance0 * Medium.ScatteringMie);
+        float3 SRayOnly = ExposedLight0Illuminance * (PlanetShadow0 * TransmittanceToLight0 * PhaseTimesScattering0RayOnly	+ MultiScatteredLuminance0 * Medium.ScatteringRay);
+
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+		float tPlanet1 = RaySphereIntersectNearest(P, Light1Dir, PlanetO + PLANET_RADIUS_OFFSET * UpVector, Atmosphere.BottomRadiusKm);
+		float PlanetShadow1 = tPlanet1 >= 0.0f ? 0.0f : 1.0f;
+		float3 ShadowP1 = P;
+#if SAMPLE_OPAQUE_SHADOW
+	#if SKYVIEWLUT_PASS
+		ShadowP1 = GetTranslatedCameraPlanetPos() + t * mul(LocalReferencial, WorldDir); // Inverse of the local SkyViewLUT referencial transform
+	#endif
+		{
+			float3 ShadowSampleWorldPosition1 = ShadowP1 * SKY_UNIT_TO_CM + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz;
+			PlanetShadow1 *= ComputeLight1VolumeShadowing(ShadowSampleWorldPosition1/* - DFHackToFloat(PrimaryView.PreViewTranslation)*/, false, false, bUnused);
+		#if VIRTUAL_SHADOW_MAP
+			if (VirtualShadowMapId1 != INDEX_NONE)
+			{
+				FVirtualShadowMapSampleResult VirtualShadowMapSample = SampleVirtualShadowMapDirectional(VirtualShadowMapId1, ShadowSampleWorldPosition1);
+				PlanetShadow1 *= VirtualShadowMapSample.ShadowFactor;
+			}
+		#endif // VIRTUALSHADOW_MAP
+		}
+#endif // SAMPLE_OPAQUE_SHADOW
+#if SAMPLE_CLOUD_SHADOW
+		float OutOpticalDepth3 = 0.0f;
+		PlanetShadow1 *= saturate(lerp(1.0f, GetCloudVolumetricShadow(ShadowP1 * SKY_UNIT_TO_CM + View.SkyPlanetTranslatedWorldCenterAndViewHeight.xyz, VolumetricCloudCommonParameters.CloudShadowmapTranslatedWorldToLightClipMatrix[1],
+			VolumetricCloudCommonParameters.CloudShadowmapFarDepthKm[1].x, VolumetricCloudShadowMapTexture1, VolumetricCloudShadowMapTexture1Sampler, OutOpticalDepth3), VolumetricCloudShadowStrength1));
+#endif
+		//  Multi-scattering can work for the second light but it is disabled for the sake of performance.
+		S		 += ExposedLight1Illuminance * (PlanetShadow1 * TransmittanceToLight1 * PhaseTimesScattering1		 + MultiScatteredLuminance1 * Medium.Scattering);
+		SMieOnly += ExposedLight1Illuminance * (PlanetShadow1 * TransmittanceToLight1 * PhaseTimesScattering1MieOnly + MultiScatteredLuminance1 * Medium.ScatteringMie);
+		SRayOnly += ExposedLight1Illuminance * (PlanetShadow1 * TransmittanceToLight1 * PhaseTimesScattering1RayOnly + MultiScatteredLuminance1 * Medium.ScatteringRay);
+#endif
+
+        // When using the power serie to accumulate all sattering order, serie r must be <1 for a serie to converge. 
+        // Under extreme coefficient, MultiScatAs1 can grow larger and thus results in broken visuals. 
+        // The way to fix that is to use a proper analytical integration as porposed in slide 28 of http://www.frostbite.com/2015/08/physically-based-unified-volumetric-rendering-in-frostbite/ 
+        // However, it is possible to disable as it can also work using simple power serie sum unroll up to 5th order. The rest of the orders has a really low contribution. 
+#define MULTI_SCATTERING_POWER_SERIE 0 
+        const float3 SafeMediumExtinction = max(Medium.Extinction, 1.e-9);
+#if MULTI_SCATTERING_POWER_SERIE==0 
+        // 1 is the integration of luminance over the 4pi of a sphere, and assuming an isotropic phase function of 1.0/(4*PI) 
+        Result.MultiScatAs1 += Throughput * Medium.Scattering * 1.0f * dt;
+#else 
+        float3 MS = Medium.Scattering * 1;
+        float3 MSint = (MS - MS * SampleTransmittance) / SafeMediumExtinction;
+        Result.MultiScatAs1 += Throughput * MSint;
+#endif
+
+#if 0
+        L			+= Throughput * S * dt;
+        LMieOnly	+= Throughput * SMieOnly * dt;
+        LRayOnly	+= Throughput * SRayOnly * dt;
+        Throughput	*= SampleTransmittance;
+#else
+        // See slide 28 at http://www.frostbite.com/2015/08/physically-based-unified-volumetric-rendering-in-frostbite/ 
+        float3 Sint			= (S        - S        * SampleTransmittance) / SafeMediumExtinction;	// integrate along the current step segment 
+        float3 SintMieOnly	= (SMieOnly - SMieOnly * SampleTransmittance) / SafeMediumExtinction;
+        float3 SintRayOnly	= (SRayOnly - SRayOnly * SampleTransmittance) / SafeMediumExtinction;
+        L			+= Throughput * Sint;														// accumulate and also take into account the transmittance from previous steps
+        LMieOnly	+= Throughput * SintMieOnly;
+        LRayOnly	+= Throughput * SintRayOnly;
+        Throughput	*= SampleTransmittance;
+#endif
+
+        tPrev = t;
     }
-        Result.OpticalDepth			= OpticalDepth;
-        return Result;
+
+    if (Ground && tMax == tBottom)
+    {
+        // Account for bounced light off the planet
+        float3 P = WorldPos + tBottom * WorldDir;
+        float PHeight = length(P);
+
+        const float3 UpVector = P / PHeight;
+        float Light0ZenithCosAngle = dot(Light0Dir, UpVector);
+        float3 TransmittanceToLight0 = GetTransmittance(Light0ZenithCosAngle, PHeight);
+
+        const float NdotL0 = saturate(dot(UpVector, Light0Dir));
+        L += Light0Illuminance * TransmittanceToLight0 * Throughput * NdotL0 * GroundAlbedo.rgb / PI;
+#if SECOND_ATMOSPHERE_LIGHT_ENABLED
+        {
+            const float NdotL1 = saturate(dot(UpVector, Light1Dir));
+            float Light1ZenithCosAngle = dot(UpVector, Light1Dir);
+            float3 TransmittanceToLight1 = GetTransmittance(Light1ZenithCosAngle, PHeight);
+            L += Light1Illuminance * TransmittanceToLight1 * Throughput * NdotL1 * GroundAlbedo.rgb / PI;
+        }
+#endif
+    }
+    
+    Result.L					= L;
+    Result.LMieOnly				= LMieOnly;
+    Result.LRayOnly				= LRayOnly;
+    Result.OpticalDepth			= OpticalDepth;
+    Result.Transmittance		= Throughput * PlanetOnOpaque;
+    Result.TransmittanceMieOnly	= ThroughputMieOnly * PlanetOnOpaque;
+    Result.TransmittanceRayOnly	= ThroughputRayOnly * PlanetOnOpaque;
+
+    return Result;
 }
 
 ////////////////////////////////////////////////////////////
 // Transmittance LUT
 ////////////////////////////////////////////////////////////
+
+#ifndef THREADGROUP_SIZE
+#define THREADGROUP_SIZE 1
+#endif
+
+RW_TEXTURE2D(float3, _TransmittanceLutUAV);
 
 [numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
 void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
@@ -368,4 +570,131 @@ void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
     float3 transmittance = exp(-ss.OpticalDepth);
 
     _TransmittanceLutUAV[int2(PixPos)] = transmittance;
+}
+
+
+////////////////////////////////////////////////////////////
+// Multi-scattering LUT
+////////////////////////////////////////////////////////////
+
+RW_TEXTURE2D(float3, _MultiScatteredLuminanceLutUAV);
+StructuredBuffer<float4> _UniformSphereSamplesBuffer;
+uint _UniformSphereSamplesBufferSampleCount;
+
+[numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
+void RenderMultiScatteredLuminanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
+{
+    float2 PixPos = float2(ThreadId.xy) + 0.5f;
+    // We do no apply UV transform from sub range here as it has minimal impact.
+
+    float CosLightZenithAngle = (PixPos.x * MultiScatteredLuminanceLutSizeAndInvSize.z) * 2.0f - 1.0f;
+    float3 LightDir = float3(0.0f, CosLightZenithAngle, sqrt(saturate(1.0f - CosLightZenithAngle * CosLightZenithAngle)));
+    const float3 NullLightDirection = float3(0.0f,1.0f, 0.0f);
+    const float3 NullLightIlluminance = float3(0.0f, 0.0f, 0.0f);
+    const float3 OneIlluminance = float3(1.0f, 1.0f, 1.0f);  // Assume a pure white light illuminance for the LUT to act as a transfer (be independent of the light, only dependent on the earth)
+    float ViewHeight = BottomRadiusKm + (PixPos.y * MultiScatteredLuminanceLutSizeAndInvSize.w) * (TopRadiusKm - BottomRadiusKm);
+
+    float3 WorldPos = float3(0.0f, ViewHeight, 0.0f);
+    float3 WorldDir = float3(0.0f, 1.0f, 0.0f);
+
+    SamplingSetup Sampling = (SamplingSetup)0;
+    {
+        Sampling.VariableSampleCount = false;
+        Sampling.SampleCountIni = MultiScatteringSampleCount;
+    }
+    const bool Ground = true;
+    const float DeviceZ = FarDepthValue;
+    const bool MieRayPhase = false;
+    const float AerialPespectiveViewDistanceScale = 1.0f;
+
+    const float SphereSolidAngle = 4.0f * PI;
+    const float IsotropicPhase = 1.0f / SphereSolidAngle;
+
+#if HIGHQUALITY_MULTISCATTERING_APPROX_ENABLED
+
+    float3 IntegratedIlluminance = 0.0f;
+    float3 MultiScatAs1 = 0.0f;
+
+    for (int s = 0; s < _UniformSphereSamplesBufferSampleCount; ++s)
+    {
+        SingleScatteringResult r0 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, _UniformSphereSamplesBuffer[s].xyz, Ground, Sampling, DeviceZ, MieRayPhase,
+            LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+
+        IntegratedIlluminance += r0.L;
+        MultiScatAs1 += r0.MultiScatAs1;
+    }
+
+    const float InvCount = 1.0f / float(_UniformSphereSamplesBufferSampleCount);
+    IntegratedIlluminance *= SphereSolidAngle * InvCount;
+    MultiScatAs1 *= InvCount;
+
+    float3 InScatteredLuminance = IntegratedIlluminance * IsotropicPhase;
+    
+#elif 1
+    
+    // Cheap and good enough approximation (but lose energy) 
+    SingleScatteringResult r0 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, WorldDir, Ground, Sampling, DeviceZ, MieRayPhase,
+        LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+    SingleScatteringResult r1 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, -WorldDir, Ground, Sampling, DeviceZ, MieRayPhase,
+        LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+
+    float3 IntegratedIlluminance = (SphereSolidAngle / 2.0f) * (r0.L + r1.L);
+    float3 MultiScatAs1 = (1.0f / 2.0f)*(r0.MultiScatAs1 + r1.MultiScatAs1);
+    float3 InScatteredLuminance = IntegratedIlluminance * IsotropicPhase;
+    
+#else
+
+    // Less cheap but approximation closer to ground truth
+	SingleScatteringResult r0 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.70710678118f, 0.0f, 0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r1 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(-0.70710678118f, 0.0f, 0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r2 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.0f, 0.70710678118f, 0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r3 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.0f, -0.70710678118f, 0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r4 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.70710678118f, 0.0f, -0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r5 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(-0.70710678118f, 0.0f, -0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r6 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.0f, 0.70710678118f, -0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+	SingleScatteringResult r7 = IntegrateSingleScatteredLuminance(float4(PixPos, 0.0f, 1.0f), WorldPos, float3(0.0f, -0.70710678118f, -0.70710678118f), Ground, Sampling, DeviceZ, MieRayPhase,
+		LightDir, NullLightDirection, OneIlluminance, NullLightIlluminance, AerialPespectiveViewDistanceScale);
+
+	// Integral of in-scattered Luminance (Lumen/(m2.sr)) over the sphere gives illuminance (Lumen/m2). 
+	// This is done with equal importance for each samples over the sphere. 
+	float3 IntegratedIlluminance = (SphereSolidAngle / 8.0f) * (r0.L + r1.L + r2.L + r3.L + r4.L + r5.L + r6.L + r7.L);
+
+	// MultiScatAs1 represents the contribution of a uniform environment light over a sphere of luminance 1 and assuming an isotropic phase function 
+	float3 MultiScatAs1 = (1.0f / 8.0f)*(r0.MultiScatAs1 + r1.MultiScatAs1 + r2.MultiScatAs1 + r3.MultiScatAs1 + r4.MultiScatAs1 + r5.MultiScatAs1 + r6.MultiScatAs1 + r7.MultiScatAs1);
+
+	// Compute the InScatteredLuminance (Lumen/(m2.sr)) assuming a uniform IntegratedIlluminance, isotropic phase function (1.0/sr)
+	// and the fact that this illumiance would be used for each path/raymarch samples of each path
+	float3 InScatteredLuminance = IntegratedIlluminance * IsotropicPhase;
+    
+#endif
+
+    // MultiScatAs1 represents the amount of luminance scattered as if the integral of scattered luminance over the sphere would be 1.
+    //  - 1st order of scattering: one can ray-march a straight path as usual over the sphere. That is InScatteredLuminance.
+    //  - 2nd order of scattering: the inscattered luminance is InScatteredLuminance at each of samples of fist order integration. Assuming a uniform phase function that is represented by MultiScatAs1,
+    //  - 3nd order of scattering: the inscattered luminance is (InScatteredLuminance * MultiScatAs1 * MultiScatAs1)
+    //  - etc.
+#if	MULTI_SCATTERING_POWER_SERIE==0
+    float3 MultiScatAs1SQR = MultiScatAs1 * MultiScatAs1;
+    float3 L = InScatteredLuminance * (1.0f + MultiScatAs1 + MultiScatAs1SQR + MultiScatAs1 * MultiScatAs1SQR + MultiScatAs1SQR * MultiScatAs1SQR);
+#else
+    // For a serie, sum_{n=0}^{n=+inf} = 1 + r + r^2 + r^3 + ... + r^n = 1 / (1.0 - r), see https://en.wikipedia.org/wiki/Geometric_series  
+    const float3 R = MultiScatAs1;
+    const float3 SumOfAllMultiScatteringEventsContribution = 1.0f / (1.0f - R);
+    float3 L = InScatteredLuminance * SumOfAllMultiScatteringEventsContribution;
+#endif
+
+    // MultipleScatteringFactor can be applied here because the LUT is compute every frame
+    // L is pre-exposed since InScatteredLuminance is computed from pre-exposed sun light. So multi-scattering contribution is pre-exposed.
+#if SHADING_PATH_MOBILE
+    _MultiScatteredLuminanceLutUAV[int2(PixPos)] = float4(L * MultiScatteringFactor, 0.0f);
+#else
+    _MultiScatteredLuminanceLutUAV[int2(PixPos)] = L * MultiScatteringFactor;
+#endif
 }

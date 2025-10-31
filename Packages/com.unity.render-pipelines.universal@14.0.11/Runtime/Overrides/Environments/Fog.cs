@@ -138,11 +138,11 @@ namespace UnityEngine.Rendering.Universal
                 enabled.value ?fogMaxOpacity.value : 0
             );
             
-            cb._ExponentialFogParameters = ExponentialFogParameters;
-            cb._ExponentialFogParameters2 = ExponentialFogParameters2;
-            cb._DirectionalInscatteringColor = DirectionalInscatteringColor;
-            cb._ExponentialFogParameters3 = ExponentialFogParameters3;
-            cb._ExponentialFogColorParameter = ExponentialFogColorParameter;
+            cb.ExponentialFogParameters = ExponentialFogParameters;
+            cb.ExponentialFogParameters2 = ExponentialFogParameters2;
+            cb.DirectionalInscatteringColor = DirectionalInscatteringColor;
+            cb.ExponentialFogParameters3 = ExponentialFogParameters3;
+            cb.ExponentialFogColorParameter = ExponentialFogColorParameter;
             
             LocalVolumetricFogArtistParameters param = new LocalVolumetricFogArtistParameters(albedo.value, meanFreePath.value, anisotropy.value);
             LocalVolumetricFogEngineData data = param.ConvertToEngineData();

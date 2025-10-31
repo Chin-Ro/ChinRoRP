@@ -8,6 +8,10 @@
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
 
+#if defined(_SURFACE_TYPE_TRANSPARENT)
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/AtmosphericScattering.hlsl"
+#endif
+
 struct Attributes
 {
     float4 positionOS : POSITION;
@@ -26,13 +30,13 @@ struct Varyings
     float2 uv : TEXCOORD0;
     float fogCoord : TEXCOORD1;
     float4 positionCS : SV_POSITION;
-
-    #if defined(DEBUG_DISPLAY)
     float3 positionWS : TEXCOORD2;
-    float3 normalWS : TEXCOORD3;
-    float3 viewDirWS : TEXCOORD4;
+    float3 viewDirWS : TEXCOORD3;
+    
+    #if defined(DEBUG_DISPLAY)
+    float3 normalWS : TEXCOORD4;
     #endif
-
+    
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -40,21 +44,19 @@ struct Varyings
 void InitializeInputData(Varyings input, out InputData inputData)
 {
     inputData = (InputData)0;
-
-    #if defined(DEBUG_DISPLAY)
+    
     inputData.positionWS = input.positionWS;
-    inputData.normalWS = input.normalWS;
     inputData.viewDirectionWS = input.viewDirWS;
-    #else
-    inputData.positionWS = float3(0, 0, 0);
-    inputData.normalWS = half3(0, 0, 1);
-    inputData.viewDirectionWS = half3(0, 0, 1);
+    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+    
+    #if defined(DEBUG_DISPLAY)
+    inputData.normalWS = input.normalWS;
     #endif
     inputData.shadowCoord = 0;
     inputData.fogCoord = 0;
     inputData.vertexLighting = half3(0, 0, 0);
     inputData.bakedGI = half3(0, 0, 0);
-    inputData.normalizedScreenSpaceUV = 0;
+    
     inputData.shadowMask = half4(1, 1, 1, 1);
 }
 
@@ -75,18 +77,18 @@ Varyings UnlitPassVertex(Attributes input)
     #else
     output.fogCoord = ComputeFogFactor(vertexInput.positionCS.z);
     #endif
-
+    
+    output.positionWS = vertexInput.positionWS;
+    half3 viewDirWS = GetWorldSpaceViewDir(vertexInput.positionWS);
+    output.viewDirWS = viewDirWS;
+    
     #if defined(DEBUG_DISPLAY)
     // normalWS and tangentWS already normalize.
     // this is required to avoid skewing the direction during interpolation
     // also required for per-vertex lighting and SH evaluation
     VertexNormalInputs normalInput = GetVertexNormalInputs(input.normalOS, input.tangentOS);
-    half3 viewDirWS = GetWorldSpaceViewDir(vertexInput.positionWS);
-
     // already normalized from normal transform to WS.
-    output.positionWS = vertexInput.positionWS;
     output.normalWS = normalInput.normalWS;
-    output.viewDirWS = viewDirWS;
     #endif
 
     return output;
@@ -144,6 +146,12 @@ void UnlitPassFragment(
 #endif
     finalColor.rgb = MixFog(finalColor.rgb, fogFactor);
     finalColor.a = OutputAlpha(finalColor.a, IsSurfaceTypeTransparent(_Surface));
+
+#if defined(_SURFACE_TYPE_TRANSPARENT)
+    float4 positionSS = input.positionCS;
+    PositionInputs posInput = GetPositionInput(positionSS.xy, _ScreenSize.zw, positionSS.z, positionSS.w, input.positionWS);
+    finalColor = EvaluateAtmosphericScattering(posInput, inputData.viewDirectionWS, inputData.normalizedScreenSpaceUV, finalColor);
+#endif
 
     outColor = finalColor;
 

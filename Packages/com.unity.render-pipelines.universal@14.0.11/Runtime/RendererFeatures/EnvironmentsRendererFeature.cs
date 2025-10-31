@@ -305,6 +305,7 @@ namespace UnityEngine.Rendering.Universal
 
         protected override void Dispose(bool disposing)
         {
+            m_SkyAtmosphereLookUpTablesPass?.Dispose();
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();
@@ -519,17 +520,20 @@ namespace UnityEngine.Rendering.Universal
         
         // Atmosphere
         public static readonly int _TransmittanceLutUAV = Shader.PropertyToID("_TransmittanceLutUAV");
+        public static readonly int _TransmittanceLutTexture = Shader.PropertyToID("_TransmittanceLutTexture");
         public static readonly int _MultiScatteredLuminanceLutUAV = Shader.PropertyToID("_MultiScatteredLuminanceLutUAV");
+        public static readonly int _UniformSphereSamplesBuffer = Shader.PropertyToID("_UniformSphereSamplesBuffer");
+        public static readonly int _UniformSphereSamplesBufferSampleCount = Shader.PropertyToID("_UniformSphereSamplesBufferSampleCount");
     }
     
     internal struct ShaderVariablesEnvironments
     {
         // Volumetric lighting / Fog.
-        public Vector4 _ExponentialFogParameters;
-        public Vector4 _ExponentialFogParameters2;
-        public Vector4 _DirectionalInscatteringColor;
-        public Vector4 _ExponentialFogParameters3;
-        public Vector4 _ExponentialFogColorParameter;
+        public Vector4 ExponentialFogParameters;
+        public Vector4 ExponentialFogParameters2;
+        public Vector4 DirectionalInscatteringColor;
+        public Vector4 ExponentialFogParameters3;
+        public Vector4 ExponentialFogColorParameter;
         public Vector4 _MipFogParameters;
         public Vector4 _HeightFogBaseScattering;
         public Vector4 _HeightFogExponents;
