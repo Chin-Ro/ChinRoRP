@@ -11,14 +11,22 @@ namespace UnityEngine.Rendering.Universal
 
         private RTHandle TransmittanceLut;
         private RTHandle MultiScatteredLuminanceLut;
+        private RTHandle SkyAtmosphereViewLutTexture;
+        private RTHandle SkyAtmosphereCameraAerialPerspectiveVolume;
+        private RTHandle SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly;
+        private RTHandle SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly;
         
         private RenderTextureDescriptor descriptor;
 
         private ComputeShader m_SkyAtmosphereLookUpTablesCS;
         private int m_TransmittanceLutKernel;
-        private int m_RenderMultiScatteredLuminanceLutKernel;
+        private int m_MultiScatteredLuminanceLutKernel;
+        private int m_DisatantSkyLightLutKernel;
+        private int m_SkyViewLutKernel;
+        private int m_CameraAerialPerspectiveVolumeKernel;
 
         private ComputeBuffer UniformSphereSamplesBuffer = new ComputeBuffer(GroupSize * GroupSize, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured, ComputeBufferMode.Immutable);
+        private ComputeBuffer DistantSkyLightLutBuffer;
         private Vector4[] Dest = new Vector4[GroupSize * GroupSize];
         
         public SkyAtmosphereLookUpTablesPass(EnvironmentsData data)
@@ -50,12 +58,16 @@ namespace UnityEngine.Rendering.Universal
         public void Setup()
         {
             m_TransmittanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderTransmittanceLutCS");
-            m_RenderMultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
+            m_MultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
+            m_DisatantSkyLightLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderDistantSkyLightLutCS");
+            m_SkyViewLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderSkyViewLutCS");
+            m_CameraAerialPerspectiveVolumeKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderCameraAerialPerspectiveVolumeCS");
         }
 
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             // Transmittance LUT
+            if (SkyAtmosphereUtils.CVarSkyAtmosphereTransmittanceLUT > 0)
             {
                 descriptor.width = SkyAtmosphereUtils.CVarSkyAtmosphereTransmittanceLUTWidth;
                 descriptor.height = SkyAtmosphereUtils.CVarSkyAtmosphereTransmittanceLUTHeight;
@@ -76,6 +88,34 @@ namespace UnityEngine.Rendering.Universal
                 descriptor.graphicsFormat = GraphicsFormat.B10G11R11_UFloatPack32;
                 RenderingUtils.ReAllocateIfNeeded(ref MultiScatteredLuminanceLut, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "MultiScatteredLuminanceLut");
             }
+
+            if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
+            {
+                DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
+            }
+
+            {
+                descriptor.width = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUTWidth;
+                descriptor.height = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUTHeight;
+                RenderingUtils.ReAllocateIfNeeded(ref SkyAtmosphereViewLutTexture, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "SkyAtmosphereViewLutTexture");
+            }
+
+            {
+                descriptor.width = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveLUTWidth;
+                descriptor.height = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveLUTWidth;
+                descriptor.volumeDepth = (int)SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveLUTDepthResolution;
+                descriptor.dimension = TextureDimension.Tex3D;
+                descriptor.graphicsFormat = GraphicsFormat.R32G32B32A32_SFloat;
+                RenderingUtils.ReAllocateIfNeeded(ref SkyAtmosphereCameraAerialPerspectiveVolume, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "SkyAtmosphereCameraAerialPerspectiveVolume");
+            }
+            
+            bool bSeparatedAtmosphereMieRayLeigh = false; // todo: Volumetric Clouds need this.
+
+            if (bSeparatedAtmosphereMieRayLeigh)
+            {
+                RenderingUtils.ReAllocateIfNeeded(ref SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly");
+                RenderingUtils.ReAllocateIfNeeded(ref SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly");
+            }
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -91,21 +131,83 @@ namespace UnityEngine.Rendering.Universal
             using (new ProfilingScope(cmd, new ProfilingSampler("SkyAtmosphere LookUpTables")))
             {
                 // Transmittance LUT
-                int threadGroupX = UniversalUtils.DivRoundUp(TransmittanceLut.rt.width, GroupSize);
-                int threadGroupY = UniversalUtils.DivRoundUp(TransmittanceLut.rt.height, GroupSize);
-                
-                cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, EnvironmentConstants._TransmittanceLutUAV, TransmittanceLut);
-                cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, threadGroupX, threadGroupY, 1);
+                if (SkyAtmosphereUtils.CVarSkyAtmosphereTransmittanceLUT > 0)
+                {
+                    int threadGroupX = UniversalUtils.DivRoundUp(TransmittanceLut.rt.width, GroupSize);
+                    int threadGroupY = UniversalUtils.DivRoundUp(TransmittanceLut.rt.height, GroupSize);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, EnvironmentConstants._TransmittanceLutUAV, TransmittanceLut);
+                    cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_TransmittanceLutKernel, threadGroupX, threadGroupY, 1);
+                    cmd.SetGlobalTexture(EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                }
                 
                 // Multi-Scattering LUT
-                CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "HIGHQUALITY_MULTISCATTERING_APPROX_ENABLED", bHighQualityMultiScattering);
-                cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, EnvironmentConstants._UniformSphereSamplesBuffer, UniformSphereSamplesBuffer);
-                cmd.SetComputeIntParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._UniformSphereSamplesBufferSampleCount, GroupSize);
-                cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, EnvironmentConstants._MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
-                cmd.SetGlobalTexture(EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
-                cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_RenderMultiScatteredLuminanceLutKernel, threadGroupX, threadGroupY, 1);
+                {
+                    int threadGroupX = UniversalUtils.DivRoundUp(MultiScatteredLuminanceLut.rt.width, GroupSize);
+                    int threadGroupY = UniversalUtils.DivRoundUp(MultiScatteredLuminanceLut.rt.height, GroupSize);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "HIGHQUALITY_MULTISCATTERING_APPROX_ENABLED", bHighQualityMultiScattering);
+                    m_SkyAtmosphereLookUpTablesCS.SetTexture(m_MultiScatteredLuminanceLutKernel,EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                    cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_MultiScatteredLuminanceLutKernel, EnvironmentConstants._UniformSphereSamplesBuffer, UniformSphereSamplesBuffer);
+                    cmd.SetComputeIntParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._UniformSphereSamplesBufferSampleCount, GroupSize);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_MultiScatteredLuminanceLutKernel, EnvironmentConstants._MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
+                    cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_MultiScatteredLuminanceLutKernel, threadGroupX, threadGroupY, 1);
+                    cmd.SetGlobalTexture(EnvironmentConstants._MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
+                }
                 
                 // Distant Sky Light LUT
+                if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
+                {
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, EnvironmentConstants._MultiScatteredLuminanceLutTexture, MultiScatteredLuminanceLut);
+                    cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, EnvironmentConstants._UniformSphereSamplesBuffer, UniformSphereSamplesBuffer);
+                    cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, EnvironmentConstants._DistantSkyLightLutBufferUAV, DistantSkyLightLutBuffer);
+                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._DistantSkyLightSampleAltitude, SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUTAltitude);
+                    cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, 1, 1, 1);
+                }
+
+                bool bLightDiskEnabled = renderingData.cameraData.cameraType != CameraType.Reflection;
+                float AerialPerspectiveStartDepthInM = GetValidAerialPerspectiveStartDepthInM(skyAtmosphere, renderingData.cameraData.camera);
+                
+                // Sky View LUT todo: Cloud part
+                {
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_CLOUD_SKYAO", false);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_OPAQUE_SHADOW", true);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_CLOUD_SHADOW", false);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_SkyViewLutKernel, EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_SkyViewLutKernel, EnvironmentConstants._MultiScatteredLuminanceLutTexture,
+                        MultiScatteredLuminanceLut);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_SkyViewLutKernel, EnvironmentConstants._SkyViewLutUAV, SkyAtmosphereViewLutTexture);
+                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._SourceDiskEnabled, bLightDiskEnabled ? 1 : 0);
+                    int threadGroupX = UniversalUtils.DivRoundUp(SkyAtmosphereViewLutTexture.rt.width, GroupSize);
+                    int threadGroupY = UniversalUtils.DivRoundUp(SkyAtmosphereViewLutTexture.rt.height, GroupSize);
+                    cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_SkyViewLutKernel, threadGroupX, threadGroupY, 1);
+                    cmd.SetGlobalTexture(EnvironmentConstants._SkyViewLutUAV, SkyAtmosphereViewLutTexture);
+                }
+                
+                // Camera Atmosphere Volume
+                {
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_CLOUD_SKYAO", false);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_OPAQUE_SHADOW", true);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SAMPLE_CLOUD_SHADOW", false);
+                    CoreUtils.SetKeyword(m_SkyAtmosphereLookUpTablesCS, "SEPARATE_MIE_RAYLEIGH_SCATTERING", bSeparatedAtmosphereMieRayLeigh);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants._TransmittanceLutTexture, TransmittanceLut);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants._MultiScatteredLuminanceLutTexture, MultiScatteredLuminanceLut);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants._CameraAerialPerspectiveVolumeUAV, SkyAtmosphereCameraAerialPerspectiveVolume);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants._CameraAerialPerspectiveVolumeMieOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly);
+                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants._CameraAerialPerspectiveVolumeRayOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly);
+                    
+                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._AerialPerspectiveStartDepthInM, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
+                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants._RealTimeReflection360Mode, 0.0f);
+                    
+                    int threadGroupX = UniversalUtils.DivRoundUp(SkyAtmosphereCameraAerialPerspectiveVolume.rt.width, 4);
+                    int threadGroupY = UniversalUtils.DivRoundUp(SkyAtmosphereCameraAerialPerspectiveVolume.rt.height, 4);
+                    int threadGroupZ = UniversalUtils.DivRoundUp(SkyAtmosphereCameraAerialPerspectiveVolume.rt.volumeDepth, 4);
+                    
+                    cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, threadGroupX, threadGroupY, threadGroupZ);
+                    cmd.SetGlobalTexture(EnvironmentConstants._CameraAerialPerspectiveVolumeUAV, SkyAtmosphereCameraAerialPerspectiveVolume);
+                }
             }
         }
         
@@ -114,6 +216,20 @@ namespace UnityEngine.Rendering.Universal
             TransmittanceLut?.Release();
             MultiScatteredLuminanceLut?.Release();
             CoreUtils.SafeRelease(UniformSphereSamplesBuffer);
+            CoreUtils.SafeRelease(DistantSkyLightLutBuffer);
+            SkyAtmosphereViewLutTexture?.Release();
+            SkyAtmosphereCameraAerialPerspectiveVolume?.Release();
+            SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly?.Release();
+            SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly?.Release();
+        }
+        
+        float GetValidAerialPerspectiveStartDepthInM(SkyAtmosphere skyAtmosphere, Camera camera)
+        {
+            float AerialPerspectiveStartDepthKm = skyAtmosphere.AerialPerspectiveStartDepth.value;
+            AerialPerspectiveStartDepthKm = AerialPerspectiveStartDepthKm < 0.0f ? 0.0f : AerialPerspectiveStartDepthKm;
+            // For sky reflection capture, the start depth can be super large. So we max it to make sure the triangle is never in front the NearClippingDistance.
+            float StartDepthInCm = Mathf.Max(AerialPerspectiveStartDepthKm * SkyAtmosphereUtils.KM_TO_M, camera.nearClipPlane);
+            return StartDepthInCm;
         }
     }
 }

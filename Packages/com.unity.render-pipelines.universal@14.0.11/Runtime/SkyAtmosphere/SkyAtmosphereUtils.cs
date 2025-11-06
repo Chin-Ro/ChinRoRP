@@ -2,6 +2,12 @@
 {
     public class SkyAtmosphereUtils
     {
+        internal const float KM_TO_M = 1000.0f;
+        internal const float M_TO_KM = 1.0f / 1000.0f;
+        
+        internal const float MToSkyUnit = 0.001f;            // Meters to Kilometers
+        internal const float SkyUnitToM = 1.0f / 0.001f;	    // Kilometers to Meters
+        
         internal const int CVarSkyAtmosphere = 1;
         internal const int CVarSupportSkyAtmosphere = 1;
         internal const int CVarSupportSkyAtmosphereAffectsHeightFog = 1;

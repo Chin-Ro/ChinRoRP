@@ -68,7 +68,7 @@ namespace UnityEngine.Rendering.Universal
         
         private FAtmosphereSetup atmosphereSetup = new FAtmosphereSetup();
 
-        internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb)
+        internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb, Camera camera)
         {
             void TentToCoefficients(float TipAltitude, float TipValue, float Width, ref float LayerWidth, ref float LinTerm0, ref float LinTerm1, ref float ConstTerm0, ref float ConstTerm1)
             {
@@ -92,9 +92,6 @@ namespace UnityEngine.Rendering.Universal
                     ConstTerm1 = 0.0f;
                 }
             }
-
-            atmosphereSetup.MToSkyUnit = 0.001f;
-            atmosphereSetup.SkyUnitToM = 1.0f / 0.001f;
             
             atmosphereSetup.BottomRadiusKm = BottomRadius.value;
             atmosphereSetup.TopRadiusKm = BottomRadius.value + Mathf.Max(0.1f, AtmosphereHeight.value);
@@ -140,7 +137,7 @@ namespace UnityEngine.Rendering.Universal
                         {
                             if (component is SkyAtmosphere && component == this)
                             {
-                                atmosphereSetup.PlanetCenterKm = new Vector3(0.0f, -atmosphereSetup.BottomRadiusKm, 0.0f) + volume.transform.position * atmosphereSetup.MToSkyUnit;
+                                atmosphereSetup.PlanetCenterKm = new Vector3(0.0f, -atmosphereSetup.BottomRadiusKm, 0.0f) + volume.transform.position * SkyAtmosphereUtils.MToSkyUnit;
                             }
                         }
                     }
@@ -153,12 +150,21 @@ namespace UnityEngine.Rendering.Universal
                         {
                             if (component is SkyAtmosphere && component == this)
                             {
-                                atmosphereSetup.PlanetCenterKm = volume.transform.position * atmosphereSetup.MToSkyUnit;
+                                atmosphereSetup.PlanetCenterKm = volume.transform.position * SkyAtmosphereUtils.MToSkyUnit;
                             }
                         }
                     }
                     break;
             }
+
+            Vector3 SkyCameraTranslatedWorldOrigin;
+            Matrix4x4 SkyViewLutReferential;
+            Vector4 TempSkyPlanetData;
+            atmosphereSetup.ComputeViewData(camera.transform.position, -camera.transform.position, camera.transform.forward,
+                camera.transform.right, out SkyCameraTranslatedWorldOrigin, out TempSkyPlanetData, out SkyViewLutReferential);
+            cb.SkyPlanetTranslatedWorldCenterAndViewHeight = TempSkyPlanetData;
+            cb.SkyViewLutReferential = SkyViewLutReferential;
+            cb.SkyCameraTranslatedWorldOrigin = SkyCameraTranslatedWorldOrigin;
 
             cb.MultiScatteringFactor = atmosphereSetup.MultiScatteringFactor;
             cb.BottomRadiusKm = atmosphereSetup.BottomRadiusKm;
@@ -183,8 +189,6 @@ namespace UnityEngine.Rendering.Universal
     struct FAtmosphereSetup
     {
         //////////////////////////////////////////////// Runtime
-        public float MToSkyUnit;            // Meters to Kilometers
-        public float SkyUnitToM;	    // Kilometers to Meters
         
         public Vector3 PlanetCenterKm;		// In sky unit (kilometers)
         public float BottomRadiusKm;			// idem
@@ -210,6 +214,69 @@ namespace UnityEngine.Rendering.Universal
         
         public Color GroundAlbedo;
         public float TransmittanceMinLightElevationAngle;
+        
+        internal void ComputeViewData(Vector3 WorldCameraOrigin, Vector3 PreViewTranslation, Vector3 ViewForward, Vector3 ViewRight,
+            out Vector3 SkyCameraTranslatedWorldOriginTranslatedWorld, out Vector4 SkyPlanetTranslatedWorldCenterAndViewHeight, out Matrix4x4 SkyViewLutReferential)
+        {
+            // The constants below should match the one in SkyAtmosphereCommon.ush
+            // Always force to be 5 meters above the ground/sea level (to always see the sky and not be under the virtual planet occluding ray tracing) and lower for small planet radius
+            float PlanetRadiusOffset = 0.005f;		
+            
+            float Offset = PlanetRadiusOffset * SkyAtmosphereUtils.SkyUnitToM;
+            float BottomRadiusWorld = BottomRadiusKm * SkyAtmosphereUtils.SkyUnitToM;
+            Vector3 PlanetCenterWorld = PlanetCenterKm * SkyAtmosphereUtils.SkyUnitToM;
+            Vector3 PlanetCenterTranslatedWorld = PlanetCenterWorld + PreViewTranslation;
+            Vector3 WorldCameraOriginTranslatedWorld = WorldCameraOrigin + PreViewTranslation;
+            Vector3 PlanetCenterToCameraTranslatedWorld = WorldCameraOriginTranslatedWorld - PlanetCenterTranslatedWorld;
+            float DistanceToPlanetCenterTranslatedWorld = Mathf.Sqrt(PlanetCenterToCameraTranslatedWorld.x * PlanetCenterToCameraTranslatedWorld.x +
+                                                                       PlanetCenterToCameraTranslatedWorld.y * PlanetCenterToCameraTranslatedWorld.y +
+                                                                       PlanetCenterToCameraTranslatedWorld.z * PlanetCenterToCameraTranslatedWorld.z);
+            
+            // If the camera is below the planet surface, we snap it back onto the surface.
+            // This is to make sure the sky is always visible even if the camera is inside the virtual planet.
+            SkyCameraTranslatedWorldOriginTranslatedWorld = DistanceToPlanetCenterTranslatedWorld < (BottomRadiusWorld + Offset) ?
+                    PlanetCenterTranslatedWorld + (BottomRadiusWorld + Offset) * (PlanetCenterToCameraTranslatedWorld / DistanceToPlanetCenterTranslatedWorld) :
+                    WorldCameraOriginTranslatedWorld;
+            
+            Vector3 Temp = (SkyCameraTranslatedWorldOriginTranslatedWorld - PlanetCenterTranslatedWorld);
+            float normalizedUp = Mathf.Sqrt(Temp.x * Temp.x + Temp.y * Temp.y + Temp.z * Temp.z);
+            
+            SkyPlanetTranslatedWorldCenterAndViewHeight = new Vector4(PlanetCenterTranslatedWorld.x, PlanetCenterTranslatedWorld.y, PlanetCenterTranslatedWorld.z, normalizedUp);
+            
+            // Now compute the referential for the SkyView LUT
+            Vector3 PlanetCenterToWorldCameraPos = (SkyCameraTranslatedWorldOriginTranslatedWorld - PlanetCenterTranslatedWorld) * SkyAtmosphereUtils.MToSkyUnit;
+            Vector3 Up = PlanetCenterToWorldCameraPos.normalized;
+            Vector3 Forward = ViewForward;          // This can make texel visible when the camera is rotating. Use constant world direction instead?
+            //FVector3f	Left = normalize(cross(Forward, Up)); 
+            Vector3	Left = Vector3.Normalize(Vector3.Cross(Forward, Up));
+            float DotMainDir = Mathf.Abs(Vector3.Dot(Up, Forward));
+            SkyViewLutReferential = Matrix4x4.identity;
+            if (DotMainDir > 0.999f)
+            {
+                // When it becomes hard to generate a referential, generate it procedurally.
+                // [ Duff et al. 2017, "Building an Orthonormal Basis, Revisited" ]
+                float Sign = Up.y >= 0.0f ? 1.0f : -1.0f;
+                float a = -1.0f / (Sign + Up.y);
+                float b = Up.x * Up.z * a;
+                Forward = new Vector3( 1 + Sign * a * Mathf.Pow(Up.z, 2.0f), Sign * b, -Sign * Up.z );
+                Left = new Vector3(b,  Sign + a * Mathf.Pow(Up.x, 2.0f), -Up.x );
+
+                SkyViewLutReferential.SetColumn(0, Left);
+                SkyViewLutReferential.SetColumn(1, Up);
+                SkyViewLutReferential.SetColumn(2, Forward);
+                SkyViewLutReferential = SkyViewLutReferential.transpose;
+            }
+            else
+            {
+                // This is better as it should be more stable with respect to camera forward.
+                Forward = Vector3.Cross(Up, Left);
+                Forward.Normalize();
+                SkyViewLutReferential.SetColumn(0, Left);
+                SkyViewLutReferential.SetColumn(1, Up);
+                SkyViewLutReferential.SetColumn(2, Forward);
+                SkyViewLutReferential = SkyViewLutReferential.transpose;
+            }
+        }
     }
 
     public enum ESkyAtmosphereTransformMode

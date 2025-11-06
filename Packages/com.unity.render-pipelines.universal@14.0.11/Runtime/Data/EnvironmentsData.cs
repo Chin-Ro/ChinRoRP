@@ -42,5 +42,6 @@ namespace UnityEngine.Rendering.Universal
         public Shader opaqueAtmosphericScatteringShader;
         public Shader defaultFogVolumeShader;
         public Shader lightShaftsShader;
+        public Shader skyAtmosphereShader;
     }
 }
