@@ -519,21 +519,21 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int _BloomTintAndThreshold = Shader.PropertyToID("_BloomTintAndThreshold");
         
         // Atmosphere
-        public static readonly int _TransmittanceLutUAV = Shader.PropertyToID("TransmittanceLutUAV");
-        public static readonly int _TransmittanceLutTexture = Shader.PropertyToID("TransmittanceLutTexture");
-        public static readonly int _MultiScatteredLuminanceLutUAV = Shader.PropertyToID("MultiScatteredLuminanceLutUAV");
-        public static readonly int _MultiScatteredLuminanceLutTexture = Shader.PropertyToID("MultiScatteredLuminanceLutTexture");
-        public static readonly int _UniformSphereSamplesBuffer = Shader.PropertyToID("UniformSphereSamplesBuffer");
-        public static readonly int _UniformSphereSamplesBufferSampleCount = Shader.PropertyToID("UniformSphereSamplesBufferSampleCount");
-        public static readonly int _DistantSkyLightLutBufferUAV = Shader.PropertyToID("DistantSkyLightLutBufferUAV");
-        public static readonly int _DistantSkyLightSampleAltitude = Shader.PropertyToID("DistantSkyLightSampleAltitude");
-        public static readonly int _SourceDiskEnabled = Shader.PropertyToID("SourceDiskEnabled");
-        public static readonly int _SkyViewLutUAV = Shader.PropertyToID("SkyViewLutUAV");
-        public static readonly int _CameraAerialPerspectiveVolumeUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeUAV");
-        public static readonly int _CameraAerialPerspectiveVolumeMieOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeMieOnlyUAV");
-        public static readonly int _CameraAerialPerspectiveVolumeRayOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeRayOnlyUAV");
-        public static readonly int _AerialPerspectiveStartDepthInM = Shader.PropertyToID("AerialPerspectiveStartDepthInM");
-        public static readonly int _RealTimeReflection360Mode = Shader.PropertyToID("RealTimeReflection360Mode");
+        public static readonly int TransmittanceLutUAV = Shader.PropertyToID("TransmittanceLutUAV");
+        public static readonly int TransmittanceLutTexture = Shader.PropertyToID("TransmittanceLutTexture");
+        public static readonly int MultiScatteredLuminanceLutUAV = Shader.PropertyToID("MultiScatteredLuminanceLutUAV");
+        public static readonly int MultiScatteredLuminanceLutTexture = Shader.PropertyToID("MultiScatteredLuminanceLutTexture");
+        public static readonly int UniformSphereSamplesBuffer = Shader.PropertyToID("UniformSphereSamplesBuffer");
+        public static readonly int UniformSphereSamplesBufferSampleCount = Shader.PropertyToID("UniformSphereSamplesBufferSampleCount");
+        public static readonly int DistantSkyLightLutBufferUAV = Shader.PropertyToID("DistantSkyLightLutBufferUAV");
+        public static readonly int DistantSkyLightSampleAltitude = Shader.PropertyToID("DistantSkyLightSampleAltitude");
+        public static readonly int SourceDiskEnabled = Shader.PropertyToID("SourceDiskEnabled");
+        public static readonly int SkyViewLutUAV = Shader.PropertyToID("SkyViewLutUAV");
+        public static readonly int CameraAerialPerspectiveVolumeUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeUAV");
+        public static readonly int CameraAerialPerspectiveVolumeMieOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeMieOnlyUAV");
+        public static readonly int CameraAerialPerspectiveVolumeRayOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeRayOnlyUAV");
+        public static readonly int AerialPerspectiveStartDepthInM = Shader.PropertyToID("AerialPerspectiveStartDepthInM");
+        public static readonly int RealTimeReflection360Mode = Shader.PropertyToID("RealTimeReflection360Mode");
     }
     
     internal struct ShaderVariablesEnvironments
@@ -615,6 +615,7 @@ namespace UnityEngine.Rendering.Universal
         public Vector4 SkyPlanetTranslatedWorldCenterAndViewHeight;
         public Vector4 SkyCameraTranslatedWorldOrigin;
         public Matrix4x4 SkyViewLutReferential;
+        public Matrix4x4 ScreenToTranslatedWorld;
     }
     
     internal static class EnvironmentsUtils
@@ -629,7 +630,7 @@ namespace UnityEngine.Rendering.Universal
             VolumetricLightingUtils.UpdateShaderVariablesGlobalVolumetrics(ref cb, universalCamera, vBufferParams, s_CurrentVolumetricBufferSize);
             
             var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
-            skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb, renderingData.cameraData.camera);
+            skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb, renderingData.cameraData);
             SkyAtmosphereUtils.SetupSkyAtmosphereInternalCommonParameters(ref cb, skyAtmosphere, renderingData.cameraData);
         }
     }

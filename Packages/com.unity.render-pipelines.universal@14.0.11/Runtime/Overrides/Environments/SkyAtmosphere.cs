@@ -68,7 +68,7 @@ namespace UnityEngine.Rendering.Universal
         
         private FAtmosphereSetup atmosphereSetup = new FAtmosphereSetup();
 
-        internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb, Camera camera)
+        internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb, CameraData cameraData)
         {
             void TentToCoefficients(float TipAltitude, float TipValue, float Width, ref float LayerWidth, ref float LinTerm0, ref float LinTerm1, ref float ConstTerm0, ref float ConstTerm1)
             {
@@ -160,11 +160,20 @@ namespace UnityEngine.Rendering.Universal
             Vector3 SkyCameraTranslatedWorldOrigin;
             Matrix4x4 SkyViewLutReferential;
             Vector4 TempSkyPlanetData;
-            atmosphereSetup.ComputeViewData(camera.transform.position, -camera.transform.position, camera.transform.forward,
-                camera.transform.right, out SkyCameraTranslatedWorldOrigin, out TempSkyPlanetData, out SkyViewLutReferential);
+            atmosphereSetup.ComputeViewData(cameraData.camera.transform.position, -cameraData.camera.transform.position, cameraData.camera.transform.forward,
+                cameraData.camera.transform.right, out SkyCameraTranslatedWorldOrigin, out TempSkyPlanetData, out SkyViewLutReferential);
             cb.SkyPlanetTranslatedWorldCenterAndViewHeight = TempSkyPlanetData;
             cb.SkyViewLutReferential = SkyViewLutReferential;
             cb.SkyCameraTranslatedWorldOrigin = SkyCameraTranslatedWorldOrigin;
+            Matrix4x4 ScreenToClipMatrix = new Matrix4x4(
+                new Vector4(1, 0, 0, 0), 
+                new Vector4(0, 1, 0, 0), 
+                new Vector4(0,0, cameraData.GetProjectionMatrix().m22, cameraData.GetProjectionMatrix().m23),
+                new Vector4(0,0, -1,0));
+            cb.ScreenToTranslatedWorld = ScreenToClipMatrix * cameraData.GetProjectionMatrix().inverse * cameraData.GetViewMatrix().inverse;
+            
+            Debug.Log(cameraData.GetProjectionMatrix());
+            Debug.LogWarning(cameraData.GetGPUProjectionMatrix());
 
             cb.MultiScatteringFactor = atmosphereSetup.MultiScatteringFactor;
             cb.BottomRadiusKm = atmosphereSetup.BottomRadiusKm;
