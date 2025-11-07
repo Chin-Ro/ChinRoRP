@@ -328,27 +328,29 @@ int VirtualShadowMapId1;
 
 uint SourceDiskEnabled; 
 
-// float3 GetLightDiskLuminance(float3 PlanetCenterToCamera, float3 WorldDir, uint LightIndex)
-// {
-// 	float t = RaySphereIntersectNearest(PlanetCenterToCamera, WorldDir, float3(0.0f, 0.0f, 0.0f), BottomRadiusKm);
-// 	if (t < 0.0f												// No intersection with the planet
-// 		&& View.RenderingReflectionCaptureMask==0.0f)	// Do not render light disk when in reflection capture in order to avoid double specular. The sun contribution is already computed analyticaly.
-// 	{
-// 		// GetLightDiskLuminance contains a tiny soft edge effect
-// 		float3 LightDiskLuminance = GetLightDiskLuminance(
-// 			PlanetCenterToCamera, WorldDir, BottomRadiusKm, TopRadiusKm,
-// 			TransmittanceLutTexture, TransmittanceLutTextureSampler,
-// 			View.AtmosphereLightDirection[LightIndex].xyz, View.AtmosphereLightDiscCosHalfApexAngle_PPTrans[LightIndex].x, View.AtmosphereLightDiscLuminance[LightIndex].xyz);
-//
-// 		// Clamp to avoid crazy high values (and exposed 64000.0f luminance is already crazy high, solar system sun is 1.6x10^9). Also this removes +inf float and helps TAA.
-// 		const float3 MaxLightLuminance = 64000.0f;
-// 		float3 ExposedLightLuminance = LightDiskLuminance * OutputPreExposure;
-// 		ExposedLightLuminance = min(ExposedLightLuminance, MaxLightLuminance);
-//
-// 		return ExposedLightLuminance;
-// 	}
-// 	return 0.0f;
-// }
+float3 GetLightDiskLuminance(float3 PlanetCenterToCamera, float3 WorldDir, uint LightIndex)
+{
+	float t = RaySphereIntersectNearest(PlanetCenterToCamera, WorldDir, float3(0.0f, 0.0f, 0.0f), BottomRadiusKm);
+	if (t < 0.0f)												// No intersection with the planet
+			// Do not render light disk when in reflection capture in order to avoid double specular. The sun contribution is already computed analyticaly.
+	{
+		// GetLightDiskLuminance contains a tiny soft edge effect
+		float3 LightDiskLuminance = GetLightDiskLuminance(
+			PlanetCenterToCamera, WorldDir, BottomRadiusKm, TopRadiusKm,
+			TransmittanceLutTexture, sampler_LinearClamp,
+			LightIndex == 0 ? _MainLightPosition : _AdditionalLightsPosition[0].xyz,
+			LightIndex == 0 ? AtmosphereLightDiscCosHalfApexAngle_PPTrans : SecondAtmosphereLightDiscCosHalfApexAngle_PPTrans,
+			LightIndex == 0 ? AtmosphereLightDiscLuminance.xyz : SecondAtmosphereLightDiscLuminance.xyz);
+
+		// Clamp to avoid crazy high values (and exposed 64000.0f luminance is already crazy high, solar system sun is 1.6x10^9). Also this removes +inf float and helps TAA.
+		const float3 MaxLightLuminance = 64000.0f;
+		float3 ExposedLightLuminance = LightDiskLuminance * OutputPreExposure;
+		ExposedLightLuminance = min(ExposedLightLuminance, MaxLightLuminance);
+
+		return ExposedLightLuminance;
+	}
+	return 0.0f;
+}
 #endif
 
 
@@ -1121,14 +1123,13 @@ void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
 
 	// Compute camera position from LUT coords
 	float2 UV = (PixPos) * TransmittanceLutSizeAndInvSize.zw;
-	UV.y = 1.0f - UV.y; // Flip Y from UE to Unity
 	float ViewHeight;
 	float ViewZenithCosAngle;
 	UvToLutTransmittanceParams(ViewHeight, ViewZenithCosAngle, UV);
 
 	//  A few extra needed constants
 	float3 WorldPos = float3(0.0f, ViewHeight, 0.0f);
-	float3 WorldDir = float3(sqrt(1.0f - ViewZenithCosAngle * ViewZenithCosAngle), ViewZenithCosAngle, 0.0f);
+	float3 WorldDir = float3(0.0f, ViewZenithCosAngle, sqrt(1.0f - ViewZenithCosAngle * ViewZenithCosAngle));
 
 	SamplingSetup Sampling = (SamplingSetup)0;
 	{
@@ -1302,7 +1303,6 @@ void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
 {
 	float2 PixPos = float2(ThreadId.xy) + 0.5f;
 	float2 UV = PixPos * SkyViewLutSizeAndInvSize.zw;
-	UV.y = 1.0f - UV.y; // Flip Y from UE to Unity
 
 	float3 WorldPos = GetTranslatedCameraPlanetPos();
 
@@ -1381,7 +1381,6 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	const int LinearIndex = ThreadId.y*THREADGROUP_SIZE + ThreadId.x;
 	float2 PixPos = float2(ThreadId.xy) + 0.5f;
 	float2 UV = PixPos * SkyViewLutSizeAndInvSize.zw;
-	UV.y = 1.0f - UV.y; // Flip Y from UE to Unity
 
 	// As of today, we assume the world is alway at the top of the planet along Z.
 	// If it needs to change, we can transform all AtmosphereLightDirection into local basis onder the camera (it would then be view dependent).
@@ -1496,7 +1495,6 @@ void RenderCameraAerialPerspectiveVolumeCS(uint3 ThreadId : SV_DispatchThreadID)
 
 	float2 PixPos = float2(ThreadId.xy) + 0.5f;
 	float2 UV = PixPos  * CameraAerialPerspectiveVolumeSizeAndInvSize.zw;
-	UV.y = 1.0f - UV.y; // Flip Y from UE to Unity
 
 	float4 SVPos = float4(UV * _ScreenSize.xy, 0.0f, 1.0f);// SV_POS as if resolution was the one from the scene view.
 	float3 WorldDir =  GetScreenWorldDir(SVPos);

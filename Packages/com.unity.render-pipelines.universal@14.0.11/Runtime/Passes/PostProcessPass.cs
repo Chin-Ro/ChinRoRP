@@ -1325,12 +1325,12 @@ namespace UnityEngine.Rendering.Universal
             // Mip upsample & Blur
             BloomStage[] bloomStages = new BloomStage[]
             {
-                new BloomStage { Size = m_Bloom.bloom6Size.value, Tint = m_Bloom.bloom6Tint.value},
-                new BloomStage { Size = m_Bloom.bloom5Size.value, Tint = m_Bloom.bloom5Tint.value},
-                new BloomStage { Size = m_Bloom.bloom4Size.value, Tint = m_Bloom.bloom4Tint.value},
-                new BloomStage { Size = m_Bloom.bloom3Size.value, Tint = m_Bloom.bloom3Tint.value},
-                new BloomStage { Size = m_Bloom.bloom2Size.value, Tint = m_Bloom.bloom2Tint.value},
-                new BloomStage { Size = m_Bloom.bloom1Size.value, Tint = m_Bloom.bloom1Tint.value}
+                new BloomStage { Size = m_Bloom.bloom6Size.value, Tint = m_Bloom.bloom6Tint.value.linear},
+                new BloomStage { Size = m_Bloom.bloom5Size.value, Tint = m_Bloom.bloom5Tint.value.linear},
+                new BloomStage { Size = m_Bloom.bloom4Size.value, Tint = m_Bloom.bloom4Tint.value.linear},
+                new BloomStage { Size = m_Bloom.bloom3Size.value, Tint = m_Bloom.bloom3Tint.value.linear},
+                new BloomStage { Size = m_Bloom.bloom2Size.value, Tint = m_Bloom.bloom2Tint.value.linear},
+                new BloomStage { Size = m_Bloom.bloom1Size.value, Tint = m_Bloom.bloom1Tint.value.linear}
             };
 
             for (int i = 0, sourceIndex = 5; i < 6; i++, sourceIndex--)

@@ -3,8 +3,6 @@
     public class SkyAtmospherePass : ScriptableRenderPass
     {
         private Material skyAtmosphereMaterial;
-        private MaterialPropertyBlock _materialPropertyBlock = new MaterialPropertyBlock();
-        private FSkyAtmosphereRenderContext SkyRC = new FSkyAtmosphereRenderContext();
         
         public SkyAtmospherePass(EnvironmentsData data)
         {
@@ -12,24 +10,26 @@
             skyAtmosphereMaterial = Load(data.skyAtmosphereShader);
         }
         
-        public void Setup()
-        {
-            
-        }
-        
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            if (skyAtmosphereMaterial == null || SkyAtmosphere.IsSkyAtmosphereEnabled()) return;
-            
+            if (skyAtmosphereMaterial == null || !SkyAtmosphere.IsSkyAtmosphereEnabled()) return;
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, new ProfilingSampler("SkyAtmosphere")))
             {
                 bool bSecondAtmosphereLightEnabled = renderingData.lightData is { additionalLightsCount: > 0 } && renderingData.lightData.visibleLights[1].lightType == LightType.Directional;
+                // bool bFastSky = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUT > 0;
+                // bool bFastAerialPerspective = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveApplyOnOpaque > 0;
+                // bool bRenderSkyPixel = true;
                 
-                SkyRC.bFastSky = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUT > 0;
-                SkyRC.bFastAerialPerspective = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveApplyOnOpaque > 0;
-                SkyRC.bFastAerialPerspectiveDepthTest = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveDepthTest > 0;
-                SkyRC.bSecondAtmosphereLightEnabled = bSecondAtmosphereLightEnabled;
+                skyAtmosphereMaterial.SetFloat("DepthReadDisabled", 0.0f);
+                CoreUtils.SetKeyword(skyAtmosphereMaterial, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
+                if (RenderSettings.skybox != skyAtmosphereMaterial)
+                {
+                    RenderSettings.skybox = skyAtmosphereMaterial;
+                }
+                //CoreUtils.SetKeyword(skyAtmosphereMaterial, "FASTSKY_ENABLED", bFastSky);
+                //CoreUtils.SetKeyword(skyAtmosphereMaterial, "FASTAERIALPERSPECTIVE_ENABLED", bFastAerialPerspective);
+                //CoreUtils.SetKeyword(skyAtmosphereMaterial, "RENDERSKY_ENABLED", bRenderSkyPixel);
             }
         }
 
@@ -43,13 +43,10 @@
 
             return !shader.isSupported ? null : CoreUtils.CreateEngineMaterial(shader);
         }
-
-        struct FSkyAtmosphereRenderContext
+        
+        public void Dispose()
         {
-            public bool bFastSky;
-            public bool bFastAerialPerspective;
-            public bool bFastAerialPerspectiveDepthTest;
-            public bool bSecondAtmosphereLightEnabled;
+            CoreUtils.Destroy(skyAtmosphereMaterial);
         }
     }
 }

@@ -53,10 +53,7 @@ namespace UnityEngine.Rendering.Universal
                 }
             }
             UniformSphereSamplesBuffer.SetData(Dest);
-        }
-        
-        public void Setup()
-        {
+            
             m_TransmittanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderTransmittanceLutCS");
             m_MultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
             m_DisatantSkyLightLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderDistantSkyLightLutCS");
@@ -150,7 +147,7 @@ namespace UnityEngine.Rendering.Universal
                     cmd.SetComputeIntParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.UniformSphereSamplesBufferSampleCount, GroupSize);
                     cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_MultiScatteredLuminanceLutKernel, EnvironmentConstants.MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
                     cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_MultiScatteredLuminanceLutKernel, threadGroupX, threadGroupY, 1);
-                    cmd.SetGlobalTexture(EnvironmentConstants.MultiScatteredLuminanceLutUAV, MultiScatteredLuminanceLut);
+                    cmd.SetGlobalTexture(EnvironmentConstants.MultiScatteredLuminanceLutTexture, MultiScatteredLuminanceLut);
                 }
                 
                 // Distant Sky Light LUT
@@ -182,7 +179,7 @@ namespace UnityEngine.Rendering.Universal
                     int threadGroupX = UniversalUtils.DivRoundUp(SkyAtmosphereViewLutTexture.rt.width, GroupSize);
                     int threadGroupY = UniversalUtils.DivRoundUp(SkyAtmosphereViewLutTexture.rt.height, GroupSize);
                     cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_SkyViewLutKernel, threadGroupX, threadGroupY, 1);
-                    cmd.SetGlobalTexture(EnvironmentConstants.SkyViewLutUAV, SkyAtmosphereViewLutTexture);
+                    cmd.SetGlobalTexture(EnvironmentConstants.SkyViewLutTexture, SkyAtmosphereViewLutTexture);
                 }
                 
                 // Camera Atmosphere Volume
@@ -195,8 +192,8 @@ namespace UnityEngine.Rendering.Universal
                     cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.TransmittanceLutTexture, TransmittanceLut);
                     cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.MultiScatteredLuminanceLutTexture, MultiScatteredLuminanceLut);
                     cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeUAV, SkyAtmosphereCameraAerialPerspectiveVolume);
-                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeMieOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly);
-                    cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeRayOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly);
+                    // cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeMieOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly);
+                    // cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeRayOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly);
                     
                     cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.AerialPerspectiveStartDepthInM, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
                     cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.RealTimeReflection360Mode, 0.0f);

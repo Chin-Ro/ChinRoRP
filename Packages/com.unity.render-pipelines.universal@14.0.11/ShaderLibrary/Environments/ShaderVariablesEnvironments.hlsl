@@ -108,6 +108,12 @@ float4 SkyPlanetTranslatedWorldCenterAndViewHeight;
 float4 SkyCameraTranslatedWorldOrigin;
 float4x4 SkyViewLutReferential;
 float4x4 ScreenToTranslatedWorld;
+
+float4 AtmosphereLightDiscLuminance;
+float4 SecondAtmosphereLightDiscLuminance;
+float AtmosphereLightDiscCosHalfApexAngle_PPTrans;
+float SecondAtmosphereLightDiscCosHalfApexAngle_PPTrans;
+
 CBUFFER_END
 
 #define _HeightFogBaseExtinction _HeightFogExponents.z;

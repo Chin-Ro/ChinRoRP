@@ -28,3 +28,4 @@ MonoBehaviour:
   defaultFogVolumeShader: {fileID: 4800000, guid: f50700829487ca549a331926e80fe525,
     type: 3}
   lightShaftsShader: {fileID: 4800000, guid: 4bd61727c11040e293b620cc95623caa, type: 3}
+  skyAtmosphereShader: {fileID: 4800000, guid: 32b22cbeb9e24852a4dad7ed1622da10, type: 3}

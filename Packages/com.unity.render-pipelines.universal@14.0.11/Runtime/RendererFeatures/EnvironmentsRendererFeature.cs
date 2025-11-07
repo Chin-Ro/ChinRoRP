@@ -54,6 +54,7 @@ namespace UnityEngine.Rendering.Universal
         private RTHandle m_VolumetricLighting;
 
         private SkyAtmosphereLookUpTablesPass m_SkyAtmosphereLookUpTablesPass;
+        private SkyAtmospherePass m_SkyAtmospherePass;
         private GenerateMaxZPass m_GenerateMaxZPass;
         private ClearAndHeightFogVoxelizationPass m_ClearAndHeightFogVoxelizationPass;
         private FogVolumeVoxelizationPass m_FogVolumeVoxelizationPass;
@@ -116,6 +117,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
             
             m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData);
+            m_SkyAtmospherePass ??= new SkyAtmospherePass(environmentsData);
             
             if (volumetricLighting)
             {
@@ -188,6 +190,7 @@ namespace UnityEngine.Rendering.Universal
             if (enableSkyAtmosphere)
             {
                 renderer.EnqueuePass(m_SkyAtmosphereLookUpTablesPass);
+                renderer.EnqueuePass(m_SkyAtmospherePass);
             }
             
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
@@ -220,7 +223,6 @@ namespace UnityEngine.Rendering.Universal
 
         public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
         {
-            bool enableSkyAtmosphere = renderingData.lightData.mainLightIndex >= 0 && SkyAtmosphere.IsSkyAtmosphereEnabled();
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
             bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(renderingData.cameraData);
             bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
@@ -229,11 +231,6 @@ namespace UnityEngine.Rendering.Universal
             ConstantBuffer.PushGlobal(renderingData.commandBuffer, m_ShaderVariablesEnvironments, EnvironmentConstants._ShaderVariablesEnvironments);
             
             bool isRendererDeferred = renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
-
-            if (enableSkyAtmosphere)
-            {
-                m_SkyAtmosphereLookUpTablesPass.Setup();
-            }
             
             if (enableFog)
             {
@@ -306,6 +303,7 @@ namespace UnityEngine.Rendering.Universal
         protected override void Dispose(bool disposing)
         {
             m_SkyAtmosphereLookUpTablesPass?.Dispose();
+            m_SkyAtmospherePass?.Dispose();
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();
@@ -529,6 +527,7 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int DistantSkyLightSampleAltitude = Shader.PropertyToID("DistantSkyLightSampleAltitude");
         public static readonly int SourceDiskEnabled = Shader.PropertyToID("SourceDiskEnabled");
         public static readonly int SkyViewLutUAV = Shader.PropertyToID("SkyViewLutUAV");
+        public static readonly int SkyViewLutTexture = Shader.PropertyToID("SkyViewLutTexture");
         public static readonly int CameraAerialPerspectiveVolumeUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeUAV");
         public static readonly int CameraAerialPerspectiveVolumeMieOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeMieOnlyUAV");
         public static readonly int CameraAerialPerspectiveVolumeRayOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeRayOnlyUAV");
@@ -616,6 +615,11 @@ namespace UnityEngine.Rendering.Universal
         public Vector4 SkyCameraTranslatedWorldOrigin;
         public Matrix4x4 SkyViewLutReferential;
         public Matrix4x4 ScreenToTranslatedWorld;
+        
+        public Vector4 AtmosphereLightDiscLuminance;
+        public Vector4 SecondAtmosphereLightDiscLuminance;
+        public float AtmosphereLightDiscCosHalfApexAngle_PPTrans;
+        public float SecondAtmosphereLightDiscCosHalfApexAngle_PPTrans;
     }
     
     internal static class EnvironmentsUtils
@@ -628,10 +632,13 @@ namespace UnityEngine.Rendering.Universal
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             fog.UpdateShaderVariablesEnvironmentsCBFogParameters(ref cb, universalCamera, isMainLightingExists, enableLightShafts, enableVolumetricFog);
             VolumetricLightingUtils.UpdateShaderVariablesGlobalVolumetrics(ref cb, universalCamera, vBufferParams, s_CurrentVolumetricBufferSize);
-            
-            var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
-            skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb, renderingData.cameraData);
-            SkyAtmosphereUtils.SetupSkyAtmosphereInternalCommonParameters(ref cb, skyAtmosphere, renderingData.cameraData);
+
+            if (isMainLightingExists)
+            {
+                var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
+                skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb, renderingData);
+                SkyAtmosphereUtils.SetupSkyAtmosphereInternalCommonParameters(ref cb, skyAtmosphere, renderingData.cameraData);
+            }
         }
     }
 }

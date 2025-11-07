@@ -1847,9 +1847,20 @@ namespace UnityEngine.Rendering.Universal
                     GetSpotDirection(ref lightLocalToWorld, out lightSpotDir);
                 }
             }
-
+            
             // VisibleLight.finalColor already returns color in active color space
             lightColor = lightData.finalColor;
+            //
+            // // Sky atmosphere transmittance toward the sun for directional lights
+            // if (lightType == LightType.Directional)
+            // {
+            //     if (SkyAtmosphere.IsSkyAtmosphereEnabled())
+            //     {
+            //         var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
+            //         Color TransmittanceTowardSun = skyAtmosphere.GetAtmosphereSetup().GetTransmittanceAtGroundLevel(lightPos);
+            //         lightColor *= TransmittanceTowardSun;
+            //     }
+            // }
 
             if (light != null && light.bakingOutput.lightmapBakeType == LightmapBakeType.Mixed &&
                 0 <= light.bakingOutput.occlusionMaskChannel &&
