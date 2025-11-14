@@ -1431,6 +1431,36 @@ namespace UnityEngine.Rendering
 
             return fogEnable;
         }
+        
+        /// <summary>
+        /// Returns true if "Skybox" is enabled for the view associated with the given camera.
+        /// </summary>
+        /// <param name="camera">Input camera.</param>
+        /// <returns>True if "Skybox" is enabled for the view associated with the given camera.</returns>
+        public static bool IsSceneViewSkyboxEnabled(Camera camera)
+        {
+            bool fogEnable = true;
+
+#if UNITY_EDITOR
+            if (camera.cameraType == CameraType.SceneView)
+            {
+                fogEnable = false;
+
+                // Determine whether the "Animated Materials" checkbox is checked for the current view.
+                for (int i = 0; i < UnityEditor.SceneView.sceneViews.Count; i++)
+                {
+                    var sv = UnityEditor.SceneView.sceneViews[i] as UnityEditor.SceneView;
+                    if (sv.camera == camera && sv.sceneViewState.skyboxEnabled)
+                    {
+                        fogEnable = true;
+                        break;
+                    }
+                }
+            }
+#endif
+
+            return fogEnable;
+        }
 
         /// <summary>
         /// Returns true if any Scene view is using the Scene filtering.

@@ -119,11 +119,6 @@ float2 GetScreenPositionForProjectionType(float2 ScreenPosition, float SceneDept
 float3 GetScreenWorldDir(in float4 SVPos)
 {
 	return  GetSkyViewDirWS(SVPos.xy);
-	
-	float2 ScreenPosition = SvPositionToScreenPosition(SVPos).xy;
-	const float Depth = 10000.0f;
-	float4 TranslatedWorldPos = mul(float4(GetScreenPositionForProjectionType(ScreenPosition, Depth), Depth, 1), ScreenToTranslatedWorld);
-	return normalize(TranslatedWorldPos - GetCameraPositionWS());
 }
 
 float2 FromUnitToSubUvs(float2 uv, float4 SizeAndInvSize) { return (uv + 0.5f * SizeAndInvSize.zw) * (SizeAndInvSize.xy / (SizeAndInvSize.xy + 1.0f)); }
@@ -226,7 +221,7 @@ float4 GetAerialPerspectiveLuminanceTransmittanceWithFogOver(
 	const float NearFadeOutRangeInvDepthKm = 1.0 / 0.001f; // 1 centimeter fade region
 	float4 AP = GetAerialPerspectiveLuminanceTransmittance(
 		ViewIsRealTimeReflectionCapture, CameraAerialPerspectiveVolumeSizeAndInvSize,
-		NDC, WorldPositionRelativeToCamera,
+		NDC.xy, WorldPositionRelativeToCamera,
 		AerialPerspectiveVolumeTexture, AerialPerspectiveVolumeTextureSampler,
 		AerialPerspectiveVolumeDepthResolutionInv,
 		AerialPerspectiveVolumeDepthResolution,

@@ -107,7 +107,6 @@ float temp2;
 float4 SkyPlanetTranslatedWorldCenterAndViewHeight;
 float4 SkyCameraTranslatedWorldOrigin;
 float4x4 SkyViewLutReferential;
-float4x4 ScreenToTranslatedWorld;
 
 float4 AtmosphereLightColor;
 float4 SecondAtmosphereLightColor;

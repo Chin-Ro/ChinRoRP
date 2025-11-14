@@ -102,7 +102,7 @@
             );
             
             InternalCommonParameters.AerialPespectiveViewDistanceScale = skyAtmosphere.AerialPespectiveViewDistanceScale.value;
-            InternalCommonParameters.FogShowFlagFactor = skyAtmosphere.enable.value && CoreUtils.IsSceneViewFogEnabled(universalCamera.camera) ? 1.0f : 0.0f;
+            InternalCommonParameters.FogShowFlagFactor = skyAtmosphere.enable.value && CoreUtils.IsSceneViewSkyboxEnabled(universalCamera.camera) ? 1.0f : 0.0f;
             
             ValidateSampleCountValue(InternalCommonParameters.SampleCountMin);
             ValidateMaxSampleCountValue(InternalCommonParameters.SampleCountMax, InternalCommonParameters.SampleCountMin);

@@ -23,7 +23,7 @@ namespace UnityEngine.Rendering.Universal
         public BoolParameter enable = new BoolParameter(false);
         
         [Header("Light Source")]
-        public MinFloatParameter SkyLuminanceMultiplier = new MinFloatParameter(25.0f, 0.0f);
+        public MinFloatParameter SkyLuminanceMultiplier = new MinFloatParameter(1.0f, 1.0f);
         public ClampedFloatParameter LightSourceAngle = new ClampedFloatParameter(0.5357f, 0.0f, 5.0f);
         public ClampedFloatParameter SecondLightSourceAngle = new ClampedFloatParameter(0.5357f, 0.0f, 5.0f);
         
@@ -71,6 +71,16 @@ namespace UnityEngine.Rendering.Universal
             return skyAtmosphere != null && skyAtmosphere.enable.value;
         }
         
+        internal static float GetSkyLuminanceMultiplier()
+        {
+            var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
+            if (skyAtmosphere != null && skyAtmosphere.enable.value)
+            {
+                return skyAtmosphere.SkyLuminanceMultiplier.value;
+            }
+            return 1.0f;
+        }
+        
         private FAtmosphereSetup atmosphereSetup = new FAtmosphereSetup();
         
         internal FAtmosphereSetup GetAtmosphereSetup()
@@ -80,6 +90,7 @@ namespace UnityEngine.Rendering.Universal
 
         internal void CopyAtmosphereSetupToUniformShaderParameters(ref ShaderVariablesEnvironments cb, RenderingData renderingData)
         {
+            if (!SkyAtmosphere.IsSkyAtmosphereEnabled()) return;
             void TentToCoefficients(float TipAltitude, float TipValue, float Width, ref float LayerWidth, ref float LinTerm0, ref float LinTerm1, ref float ConstTerm0, ref float ConstTerm1)
             {
                 if (Width > 0.0f && TipValue > 0.0f)

@@ -12,7 +12,7 @@
         {
         	Name "Draw Skybox"
         	
-        	Blend One SrcAlpha, One Zero
+//        	Blend One SrcAlpha, One Zero
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
@@ -76,9 +76,9 @@
             float4 Frag(Varyings input) : SV_Target
             {
                 float4 OutLuminance = 0;
-            	float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
+            	// float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
             	
-                //float3 WorldDir = SafeNormalize(SafeNormalize(input.vertex.xyz) * 1000000.0f - GetCurrentViewPosition());
+                float3 WorldDir = SafeNormalize(SafeNormalize(input.vertex.xyz) * 1000000.0f - GetCurrentViewPosition());
                 float3 WorldPos = GetTranslatedCameraPlanetPos();
 
             	float2 normalizedScreenUV = input.positionCS.xy * _ScreenSize.zw;
@@ -173,96 +173,96 @@
      
 					OutLuminance = PrepareOutput(PreExposedL, SkyGreyTransmittance);
 					UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-			return OutLuminance;
             	}
             #endif
             	
+			return OutLuminance;
             	
-            #if FASTAERIALPERSPECTIVE_ENABLED
-            	#if COLORED_TRANSMITTANCE_ENABLED
-				#error The FASTAERIALPERSPECTIVE_ENABLED path does not support COLORED_TRANSMITTANCE_ENABLED.
-				#else
-    
-            		float2 NDC = input.positionCS.xy * _ScreenSize.zw;
-					float3 DepthBufferTranslatedWorldPos = ComputeWorldSpacePosition(NDC, DeviceZ, UNITY_MATRIX_I_VP).xyz;
-					float4 NDCPosition = ComputeScreenPos(input.positionCS);
-    
-            		PositionInputs posInput = GetPositionInput(input.positionCS.xy, _ScreenSize.zw, DeviceZ, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
-    
-					const float NearFadeOutRangeInvDepthKm = 1.0 / 0.001f; // 1 meter fade region
-					float4 AP = GetAerialPerspectiveLuminanceTransmittance(
-						false, float4(0,0,1,1),
-						posInput.positionNDC, (DepthBufferTranslatedWorldPos - GetCameraTranslatedWorldPos()) * M_TO_SKY_UNIT,
-						CameraAerialPerspectiveVolumeTexture, sampler_LinearClamp,
-						CameraAerialPerspectiveVolumeDepthResolutionInv,
-						CameraAerialPerspectiveVolumeDepthResolution,
-						AerialPerspectiveStartDepthKm,
-						CameraAerialPerspectiveVolumeDepthSliceLengthKm,
-						CameraAerialPerspectiveVolumeDepthSliceLengthKmInv,
-						ViewOneOverPreExposure * OutputPreExposure,
-						NearFadeOutRangeInvDepthKm);
-    
-					PreExposedL += AP.rgb * LuminanceScale;
-					float Transmittance = AP.a;
-    
-					OutLuminance = PrepareOutput(PreExposedL, float3(Transmittance, Transmittance, Transmittance));
-					UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-					return OutLuminance;
-				#endif
-            #else
-    
-            	// WorldDir = float3(-WorldDir.z, -WorldDir.x, WorldDir.y);
-            	// WorldPos = float3(-WorldPos.z, -WorldPos.x, WorldPos.y);
-            	// Move to top atmosphere as the starting point for ray marching.
-				// This is critical to be after the above to not disrupt above atmosphere tests and voxel selection.
-				if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))
-				{
-					// Ray is not intersecting the atmosphere
-					OutLuminance = PrepareOutput(PreExposedL);
-					return OutLuminance;
-				}
-    
-            	// Apply the start depth offset after moving to the top of atmosphere for consistency (and to avoid wrong out-of-atmosphere test resulting in black pixels).
-				WorldPos += WorldDir * AerialPerspectiveStartDepthKm;
-    
-				SamplingSetup Sampling = (SamplingSetup)0;
-				{
-					Sampling.VariableSampleCount = true;
-					Sampling.MinSampleCount = SampleCountMin;
-					Sampling.MaxSampleCount = SampleCountMax;
-					Sampling.DistanceToSampleCountMaxInv = DistanceToSampleCountMaxInv;
-				}
-				const bool Ground = false;
-				const bool MieRayPhase = true;
-				SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
-					input.positionCS, WorldPos, WorldDir,
-					Ground, Sampling, DeviceZ, MieRayPhase,
-					_MainLightPosition.xyz, _AdditionalLightsPosition[0].xyz, 
-					AtmosphereLightColor * SkyAndAerialPerspectiveLuminanceFactor, 
-					SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-					AerialPespectiveViewDistanceScale);
-    
-				PreExposedL += ss.L * LuminanceScale;
-			 
-				// if (View.RenderingReflectionCaptureMask == 0.0f && !IsSkyAtmosphereRenderedInMain(View.EnvironmentComponentsFlags))
+    //         #if FASTAERIALPERSPECTIVE_ENABLED
+    //         	#if COLORED_TRANSMITTANCE_ENABLED
+				// #error The FASTAERIALPERSPECTIVE_ENABLED path does not support COLORED_TRANSMITTANCE_ENABLED.
+				// #else
+    //
+    //         		float2 NDC = input.positionCS.xy * _ScreenSize.zw;
+				// 	float3 DepthBufferTranslatedWorldPos = ComputeWorldSpacePosition(NDC, DeviceZ, UNITY_MATRIX_I_VP).xyz;
+				// 	float4 NDCPosition = ComputeScreenPos(input.positionCS);
+    //
+    //         		PositionInputs posInput = GetPositionInput(input.positionCS.xy, _ScreenSize.zw, DeviceZ, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
+    //
+				// 	const float NearFadeOutRangeInvDepthKm = 1.0 / 0.001f; // 1 meter fade region
+				// 	float4 AP = GetAerialPerspectiveLuminanceTransmittance(
+				// 		false, float4(0,0,1,1),
+				// 		posInput.positionNDC, (DepthBufferTranslatedWorldPos - GetCameraTranslatedWorldPos()) * M_TO_SKY_UNIT,
+				// 		CameraAerialPerspectiveVolumeTexture, sampler_LinearClamp,
+				// 		CameraAerialPerspectiveVolumeDepthResolutionInv,
+				// 		CameraAerialPerspectiveVolumeDepthResolution,
+				// 		AerialPerspectiveStartDepthKm,
+				// 		CameraAerialPerspectiveVolumeDepthSliceLengthKm,
+				// 		CameraAerialPerspectiveVolumeDepthSliceLengthKmInv,
+				// 		ViewOneOverPreExposure * OutputPreExposure,
+				// 		NearFadeOutRangeInvDepthKm);
+    //
+				// 	PreExposedL += AP.rgb * LuminanceScale;
+				// 	float Transmittance = AP.a;
+    //
+				// 	OutLuminance = PrepareOutput(PreExposedL, float3(Transmittance, Transmittance, Transmittance));
+				// 	UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
+				// 	return OutLuminance;
+				// #endif
+    //         #else
+    //
+    //         	// WorldDir = float3(-WorldDir.z, -WorldDir.x, WorldDir.y);
+    //         	// WorldPos = float3(-WorldPos.z, -WorldPos.x, WorldPos.y);
+    //         	// Move to top atmosphere as the starting point for ray marching.
+				// // This is critical to be after the above to not disrupt above atmosphere tests and voxel selection.
+				// if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))
 				// {
-				// 	PreExposedL = 0.0f;
+				// 	// Ray is not intersecting the atmosphere
+				// 	OutLuminance = PrepareOutput(PreExposedL);
+				// 	return OutLuminance;
 				// }
-    
-            	#if SAMPLE_ATMOSPHERE_ON_CLOUDS
-				// We use gray scale transmittance to match the rendering when applying the AerialPerspective texture
-				const float GreyScaleAtmosphereTransmittance = dot(ss.Transmittance, float3(1.0 / 3.0f, 1.0 / 3.0f, 1.0 / 3.0f));
-				// Reduce cloud luminance according to the atmosphere transmittance and add the atmosphere in scattred luminance according to the cloud coverage.
-				PreExposedL = CloudLuminanceTransmittance.rgb * GreyScaleAtmosphereTransmittance + CloudCoverage * PreExposedL;
-				// Coverage of the cloud layer itself does not change.
-				ss.Transmittance = CloudLuminanceTransmittance.a;
-				#endif
-    
-            	OutLuminance = PrepareOutput(PreExposedL, ss.Transmittance);
-				UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-            			
-		        return OutLuminance;
-            #endif
+    //
+    //         	// Apply the start depth offset after moving to the top of atmosphere for consistency (and to avoid wrong out-of-atmosphere test resulting in black pixels).
+				// WorldPos += WorldDir * AerialPerspectiveStartDepthKm;
+    //
+				// SamplingSetup Sampling = (SamplingSetup)0;
+				// {
+				// 	Sampling.VariableSampleCount = true;
+				// 	Sampling.MinSampleCount = SampleCountMin;
+				// 	Sampling.MaxSampleCount = SampleCountMax;
+				// 	Sampling.DistanceToSampleCountMaxInv = DistanceToSampleCountMaxInv;
+				// }
+				// const bool Ground = false;
+				// const bool MieRayPhase = true;
+				// SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
+				// 	input.positionCS, WorldPos, WorldDir,
+				// 	Ground, Sampling, DeviceZ, MieRayPhase,
+				// 	_MainLightPosition.xyz, _AdditionalLightsPosition[0].xyz, 
+				// 	AtmosphereLightColor * SkyAndAerialPerspectiveLuminanceFactor, 
+				// 	SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+				// 	AerialPespectiveViewDistanceScale);
+    //
+				// PreExposedL += ss.L * LuminanceScale;
+			 //
+				// // if (View.RenderingReflectionCaptureMask == 0.0f && !IsSkyAtmosphereRenderedInMain(View.EnvironmentComponentsFlags))
+				// // {
+				// // 	PreExposedL = 0.0f;
+				// // }
+    //
+    //         	#if SAMPLE_ATMOSPHERE_ON_CLOUDS
+				// // We use gray scale transmittance to match the rendering when applying the AerialPerspective texture
+				// const float GreyScaleAtmosphereTransmittance = dot(ss.Transmittance, float3(1.0 / 3.0f, 1.0 / 3.0f, 1.0 / 3.0f));
+				// // Reduce cloud luminance according to the atmosphere transmittance and add the atmosphere in scattred luminance according to the cloud coverage.
+				// PreExposedL = CloudLuminanceTransmittance.rgb * GreyScaleAtmosphereTransmittance + CloudCoverage * PreExposedL;
+				// // Coverage of the cloud layer itself does not change.
+				// ss.Transmittance = CloudLuminanceTransmittance.a;
+				// #endif
+    //
+    //         	OutLuminance = PrepareOutput(PreExposedL, ss.Transmittance);
+				// UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
+    //         			
+		  //       return OutLuminance;
+    //         #endif
 		    }
 		    ENDHLSL
 		}

@@ -7,6 +7,8 @@
 
 static const float FLT_EPSILON2 = 0.01f;
 
+StructuredBuffer<float4> DistantSkyLightLutBufferSRV;
+
 float CalculateRayOriginTerm(float density, float heightFalloff, float heightOffset)
 {
     // float MaxObserverHeightDifference = 65536.0f;
@@ -97,24 +99,31 @@ float4 GetExponentialHeightFogUE(float3 WorldPositionRelativeToCamera) // camera
         ExponentialHeightLineIntegralShared += CalculateLineIntegralShared(ExponentialFogParameters2.y, RayDirectionY, RayOriginTermsSecond);
         float ExponentialHeightLineIntegral = ExponentialHeightLineIntegralShared * RayLength;
         
-        half3 InscatteringColor = ExponentialFogColorParameter.xyz + _GlossyEnvironmentColor.rgb * _SkyContributeFactor * _HeightFogBaseScattering.xyz;
+        half3 InscatteringColor = ExponentialFogColorParameter.xyz + DistantSkyLightLutBufferSRV[0].rgb * _HeightFogBaseScattering.xyz * _SkyContributeFactor;
         half3 DirectionalInscattering = 0;
 
         // if _ExponentialFogParameters3.w is negative then it's disabled, otherwise it holds directional inscattering start distance
         if (ExponentialFogParameters3.w >= 0)
         {
-            // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value;
-            half3 directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb) * PI;
-            // Setup a cosine lobe around the light direction to approximate inscattering from the directional light off of the ambient haze;
             const float UniformPhaseFunction = 1.0f / (4.0f * PI);
             
+            // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value;
+            half3 directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb * _SkyContributeFactor);
+            // Setup a cosine lobe around the light direction to approximate inscattering from the directional light off of the ambient haze;
             half3 DirectionalLightInscattering = directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _MainLightPosition.xyz)), DirectionalInscatteringColor.w) * UniformPhaseFunction;
+
+            if (SecondAtmosphereLightColor.a > 0.0f)
+            {
+                directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _AdditionalLightsColor[0].a + _AdditionalLightsColor[0].rgb * _SkyContributeFactor);
+                DirectionalLightInscattering += directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _AdditionalLightsPosition[0].xyz)), DirectionalInscatteringColor.w) * UniformPhaseFunction;
+            }
 
             float DirectionalInscatteringStartDistance = ExponentialFogParameters3.w;
             // Calculate the line integral of the eye ray through the haze, using a special starting distance to limit the inscattering to the distance
             float DirExponentialHeightLineIntegral = ExponentialHeightLineIntegralShared * max(RayLength - DirectionalInscatteringStartDistance, 0.0f);
             // Calculate the amount of light that made it through the fog using the transmission equation
             half DirectionalInscatteringFogFactor = saturate(exp2(-DirExponentialHeightLineIntegral));
+            
             // Final inscattering from the light
             DirectionalInscattering = DirectionalLightInscattering * (1. - DirectionalInscatteringFogFactor) * _HeightFogBaseScattering.xyz;
         }

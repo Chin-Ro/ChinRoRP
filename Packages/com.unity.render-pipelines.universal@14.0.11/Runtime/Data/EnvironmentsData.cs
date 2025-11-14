@@ -43,6 +43,7 @@ namespace UnityEngine.Rendering.Universal
         public Shader defaultFogVolumeShader;
         public Shader lightShaftsShader;
         public Shader skyAtmosphereShader;
+        public Material skyAtmosphereMaterial;
         public Shader skyAtmosphereAerialPerspectiveShader;
     }
 }

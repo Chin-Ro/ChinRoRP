@@ -2,7 +2,6 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/ShaderVariablesEnvironments.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/SkyAtmosphereCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/SkyUtils.hlsl"
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
 #pragma enable_d3d11_debug_symbols
 
@@ -194,7 +193,7 @@ float RaySphereIntersectNearest(float3 RayOrigin, float3 RayDir, float3 SphereCe
 // This is to always see the sky even when the camera is buried into the virtual planet.
 float3 GetCameraTranslatedWorldPos()
 {
-	return SkyCameraTranslatedWorldOrigin;
+	return SkyCameraTranslatedWorldOrigin.xyz;
 }
 
 // This is the camera position relative to the virtual planet center.
@@ -317,6 +316,8 @@ Texture3D<float4> CameraAerialPerspectiveVolumeTexture;
 Texture2D<float3> VolumetricCloudShadowMapTexture0;
 Texture2D<float3> VolumetricCloudShadowMapTexture1;
 Texture2D<float3> VolumetricCloudSkyAOTexture;
+Buffer<float4> UniformSphereSamplesBuffer;
+
 float VolumetricCloudShadowStrength0;
 float VolumetricCloudShadowStrength1;
 
@@ -879,228 +880,6 @@ void UpdateVisibleSkyAlpha(in float DeviceZ, inout float4 OutLuminance)
 	}
 }
 
-// void RenderSkyAtmosphereRayMarchingPS(
-// 	in float4 SVPos : SV_POSITION,
-// 	out float4 OutLuminance : SV_Target0
-// #if COLORED_TRANSMITTANCE_ENABLED
-// 	, float4 Transmittance : SV_TARGET1;	// For dual source blending when available
-// #endif
-// #if MSAA_SAMPLE_COUNT > 1
-// 	, in uint SampleIndex : SV_SampleIndex
-// #endif
-// )
-// {
-// 	OutLuminance = 0;
-//
-// 	float2 PixPos = SVPos.xy;
-// 	float2 UvBuffer = PixPos * View.BufferSizeAndInvSize.zw;	// Uv for depth buffer read (size can be larger than viewport)
-//
-// 	// Debug print a texture
-// 	//const float displaySize = 256.0f;
-// 	//if(all(PixPos<displaySize))
-// 	//{
-// 	//	OutLuminance = PrepareOutput(SkyViewLutTexture.SampleLevel(SkyViewLutTextureSampler, PixPos / displaySize, 0).rgb);
-// 	//	//OutLuminance = PrepareOutput(CameraAerialPerspectiveVolumeTexture.SampleLevel(CameraAerialPerspectiveVolumeTextureSampler, float3(PixPos / displaySize, PixPos.x/ displaySize), 0).rgb * ViewOneOverPreExposure);
-// 	//	return;
-// 	//}
-//
-// 	// World position are relative to the planet center (itself expressed within translated world space)
-// 	float3 WorldDir = GetScreenWorldDir(SVPos);
-// 	float3 WorldPos = GetTranslatedCameraPlanetPos();
-// 	// if(unity_OrthoParams.w)
-// 	// {
-// 	// 	WorldPos += GetTranslatedWorldCameraPosFromView(SVPos.xy, true);
-// 	// }
-//
-// 	float3 PreExposedL = 0;
-// 	float3 LuminanceScale = 1.0f;
-//
-// #if SAMPLE_ATMOSPHERE_ON_CLOUDS
-// 	// We could read cloud color and skip if transmittance<0.999. Could do that if it would be a compute shader.
-//
-// 	const float4 CloudLuminanceTransmittance = InputCloudLuminanceTransmittanceTexture.Load(int3(PixPos, 0));
-// 	const float CloudCoverage = 1.0f - CloudLuminanceTransmittance.a;
-// 	if (CloudLuminanceTransmittance.a > 0.999)
-// 	{
-// 		OutLuminance = float4(0.0f, 0.0f, 0.0f, 1.0f);
-// 		return;
-// 	}
-//
-// 	const float CloudDepthKm = VolumetricCloudDepthTexture.Load(int3(PixPos, 0)).r;
-// 	float DeviceZ = CloudDepthKm; // Warning: for simplicity, we use DeviceZ as world distance in kilometer when SAMPLE_ATMOSPHERE_ON_CLOUDS. See special case in IntegrateSingleScatteredLuminance.
-//
-// #else // SAMPLE_ATMOSPHERE_ON_CLOUDS
-//
-// #if  MSAA_SAMPLE_COUNT > 1
-// 	float DeviceZ = DepthReadDisabled ? FarDepthValue : MSAADepthTexture.Load(int2(PixPos), SampleIndex).x;
-// #else
-// 	float DeviceZ = DepthReadDisabled ? FarDepthValue : SampleSceneDepth(UvBuffer);
-// #endif
-//
-// 	if (DeviceZ == FarDepthValue)
-// 	{
-// 		// Get the light disk luminance to draw 
-// 		LuminanceScale = SkyLuminanceFactor;
-// #if SOURCE_DISK_ENABLED
-// 		if (SourceDiskEnabled > 0)
-// 		{
-// 			PreExposedL += GetLightDiskLuminance(WorldPos, WorldDir, 0);
-// 		#if SECOND_ATMOSPHERE_LIGHT_ENABLED
-// 			PreExposedL += GetLightDiskLuminance(WorldPos, WorldDir, 1);
-// 		#endif
-// 		}
-// #endif
-//
-// #if RENDERSKY_ENABLED==0
-// 		// We should not render the sky and the current pixels are at far depth, so simply early exit.
-// 		// We enable depth bound when supported to not have to even process those pixels.
-// 		OutLuminance = PrepareOutput(float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f));
-//
-// 		//Now the sky pass can ignore the pixel with depth == far but it will need to alpha clip because not all RHI backend support depthbound tests.
-// 		// And the depthtest is already setup to avoid writing all the pixel closer than to the camera than the start distance (very good optimisation).
-// 		// Since this shader does not write to depth or stencil it should still benefit from EArlyZ even with the clip (See AMD depth-in-depth documentation)
-// 		clip(-1.0f);
-// 		return;
-// #endif
-// 	}
-// 	else if (FogShowFlagFactor <= 0.0f)
-// 	{ 
-// 		OutLuminance = PrepareOutput(float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f));
-// 		clip(-1.0f);
-// 		return;
-// 	}
-// #endif // SAMPLE_ATMOSPHERE_ON_CLOUDS
-//
-// 	float ViewHeight = length(WorldPos);
-// #if FASTSKY_ENABLED && RENDERSKY_ENABLED
-// 	if (ViewHeight < (TopRadiusKm * PLANET_RADIUS_RATIO_SAFE_EDGE) && DeviceZ == FarDepthValue
-// 		&& (View.RenderingReflectionCaptureMask > 0.0f || IsSkyAtmosphereRenderedInMain(View.EnvironmentComponentsFlags)))
-// 	{
-// 		float2 UV;
-//
-// 		// The referencial used to build the Sky View lut
-// 		float3x3 LocalReferencial = GetSkyViewLutReferential(View.SkyViewLutReferential);
-//
-// 		// Input vectors expressed in this referencial: Up is always Z. Also note that ViewHeight is unchanged in this referencial.
-// 		float3 WorldPosLocal = float3(0.0, 0.0, ViewHeight);
-// 		float3 UpVectorLocal = float3(0.0, 0.0, 1.0);
-// 		float3 WorldDirLocal = mul(LocalReferencial, WorldDir);
-// 		float ViewZenithCosAngle = dot(WorldDirLocal, UpVectorLocal);
-//
-// 		// Now evaluate inputs in the referential
-// 		bool IntersectGround = RaySphereIntersectNearest(WorldPosLocal, WorldDirLocal, float3(0, 0, 0), BottomRadiusKm) >= 0.0f;
-//
-// 		SkyViewLutParamsToUv(IntersectGround, ViewZenithCosAngle, WorldDirLocal, ViewHeight, BottomRadiusKm, SkyAtmosphere.SkyViewLutSizeAndInvSize, UV);
-// 		float4 SkyLuminanceTransmittance = SkyViewLutTexture.SampleLevel(SkyViewLutTextureSampler, UV, 0);
-// 		float3 SkyLuminance = SkyLuminanceTransmittance.rgb;
-//
-// 		float3 SkyGreyTransmittance = 1.0f;
-// 		FLATTEN
-// 		if(bPropagateAlphaNonReflection > 0)
-// 		{
-// 			SkyGreyTransmittance = SkyLuminanceTransmittance.aaa;
-// 		}
-//
-// 		PreExposedL += SkyLuminance * LuminanceScale * (ViewOneOverPreExposure * OutputPreExposure);
-// 	
-// 		OutLuminance = PrepareOutput(PreExposedL, SkyGreyTransmittance);
-// 		UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-// 		return;
-// 	}
-// #endif
-//
-// #if FASTAERIALPERSPECTIVE_ENABLED
-//
-// #if COLORED_TRANSMITTANCE_ENABLED
-// #error The FASTAERIALPERSPECTIVE_ENABLED path does not support COLORED_TRANSMITTANCE_ENABLED.
-// #else
-//
-// 	float3 DepthBufferTranslatedWorldPos = GetScreenTranslatedWorldPos(SVPos, DeviceZ).xyz;
-// 	float4 NDCPosition = mul(float4(DepthBufferTranslatedWorldPos.xyz, 1), View.TranslatedWorldToClip);
-//
-// 	const float NearFadeOutRangeInvDepthKm = 1.0 / 0.00001f; // 1 centimeter fade region
-// 	float4 AP = GetAerialPerspectiveLuminanceTransmittance(
-// 		ResolvedView.RealTimeReflectionCapture, ResolvedView.SkyAtmosphereCameraAerialPerspectiveVolumeSizeAndInvSize,
-// 		NDCPosition, (DepthBufferTranslatedWorldPos - GetCameraTranslatedWorldPos()) * CM_TO_SKY_UNIT,
-// 		CameraAerialPerspectiveVolumeTexture, CameraAerialPerspectiveVolumeTextureSampler,
-// 		SkyAtmosphere.CameraAerialPerspectiveVolumeDepthResolutionInv,
-// 		SkyAtmosphere.CameraAerialPerspectiveVolumeDepthResolution,
-// 		AerialPerspectiveStartDepthKm,
-// 		SkyAtmosphere.CameraAerialPerspectiveVolumeDepthSliceLengthKm,
-// 		SkyAtmosphere.CameraAerialPerspectiveVolumeDepthSliceLengthKmInv,
-// 		ViewOneOverPreExposure * OutputPreExposure,
-// 		NearFadeOutRangeInvDepthKm);
-//
-// 	PreExposedL += AP.rgb * LuminanceScale;
-// 	float Transmittance = AP.a;
-//
-// 	OutLuminance = PrepareOutput(PreExposedL, float3(Transmittance, Transmittance, Transmittance));
-// 	UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-// 	return;
-// #endif
-//
-// #else // FASTAERIALPERSPECTIVE_ENABLED
-//
-// 	// Move to top atmosphere as the starting point for ray marching.
-// 	// This is critical to be after the above to not disrupt above atmosphere tests and voxel selection.
-// 	if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))
-// 	{
-// 		// Ray is not intersecting the atmosphere
-// 		OutLuminance = PrepareOutput(PreExposedL);
-// 		return;
-// 	}
-//
-// 	// Apply the start depth offset after moving to the top of atmosphere for consistency (and to avoid wrong out-of-atmosphere test resulting in black pixels).
-// 	WorldPos += WorldDir * AerialPerspectiveStartDepthKm;
-//
-// 	SamplingSetup Sampling = (SamplingSetup)0;
-// 	{
-// 		Sampling.VariableSampleCount = true;
-// 		Sampling.MinSampleCount = SampleCountMin;
-// 		Sampling.MaxSampleCount = SampleCountMax;
-// 		Sampling.DistanceToSampleCountMaxInv = DistanceToSampleCountMaxInv;
-// 	}
-// 	const bool Ground = false;
-// 	const bool MieRayPhase = true;
-// 	const float AerialPespectiveViewDistanceScale = DeviceZ == FarDepthValue ? 1.0f : AerialPespectiveViewDistanceScale;
-// 	SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
-// 		SVPos, WorldPos, WorldDir,
-// 		Ground, Sampling, DeviceZ, MieRayPhase,
-// 		_MainLightPosition.xyz, _AdditionalLightsPosition[0].xyz, 
-// 		_MainLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor, 
-// 		_AdditionalLightsColor[0].rgb * SkyAndAerialPerspectiveLuminanceFactor,
-// 		AerialPespectiveViewDistanceScale);
-//
-// 	PreExposedL += ss.L * LuminanceScale;
-// 	
-// 	// if (View.RenderingReflectionCaptureMask == 0.0f && !IsSkyAtmosphereRenderedInMain(View.EnvironmentComponentsFlags))
-// 	// {
-// 	// 	PreExposedL = 0.0f;
-// 	// }
-//
-// #if SAMPLE_ATMOSPHERE_ON_CLOUDS
-// 	// We use gray scale transmittance to match the rendering when applying the AerialPerspective texture
-// 	const float GreyScaleAtmosphereTransmittance = dot(ss.Transmittance, float3(1.0 / 3.0f, 1.0 / 3.0f, 1.0 / 3.0f));
-// 	// Reduce cloud luminance according to the atmosphere transmittance and add the atmosphere in scattred luminance according to the cloud coverage.
-// 	PreExposedL = CloudLuminanceTransmittance.rgb * GreyScaleAtmosphereTransmittance + CloudCoverage * PreExposedL;
-// 	// Coverage of the cloud layer itself does not change.
-// 	ss.Transmittance = CloudLuminanceTransmittance.a;
-// #endif
-//
-// #if COLORED_TRANSMITTANCE_ENABLED
-// #error Requires support for dual source blending.
-// 	output.Luminance = float4(PreExposedL, 1.0f);
-// 	output.Transmittance = float4(ss.Transmittance, 1.0f);
-// #else
-// 	OutLuminance = PrepareOutput(PreExposedL, ss.Transmittance);
-// 	UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-// 	return;
-// #endif
-//
-// #endif // FASTAERIALPERSPECTIVE_ENABLED
-// }
-
-
 
 ////////////////////////////////////////////////////////////
 // Transmittance LUT
@@ -1170,7 +949,6 @@ RWTexture2D<float4> MultiScatteredLuminanceLutUAV;
 #else
 RWTexture2D<float3> MultiScatteredLuminanceLutUAV;
 #endif
-Buffer<float4> UniformSphereSamplesBuffer;
 uint UniformSphereSamplesBufferSampleCount;
 
 [numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
@@ -1290,77 +1068,6 @@ void RenderMultiScatteredLuminanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
 }
 
 
-
-////////////////////////////////////////////////////////////
-// Sky View LUT
-////////////////////////////////////////////////////////////
-
-// Even thought the texture can have 3 channels only (see SkyAtmosphereRendering.cpp GetSkyLutTextureFormat)
-// We always write 4 channels as the grey scale transmittance can be used when alpha propagation is enabled.
-RWTexture2D<float4> SkyViewLutUAV;
-
-[numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
-void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
-{
-	float2 PixPos = float2(ThreadId.xy) + 0.5f;
-	float2 UV = PixPos * SkyViewLutSizeAndInvSize.zw;
-
-	float3 WorldPos = GetTranslatedCameraPlanetPos();
-
-	// For the sky view lut to work, and not be distorted, we need to transform the view and light directions 
-	// into a referential with UP being perpendicular to the ground. And with origin at the planet center.
-
-	// This is the local referencial
-	float3x3 LocalReferencial = GetSkyViewLutReferential(SkyViewLutReferential);
-
-	// This is the LUT camera height and position in the local referential
-	float ViewHeight = length(WorldPos);
-	WorldPos = float3(0.0, 0.0, ViewHeight);
-
-	// Get the view direction in this local referential
-	float3 WorldDir;
-	UvToSkyViewLutParams(WorldDir, ViewHeight, UV);
-	// And also both light source direction
-	float3 AtmosphereLightDirection0 = _MainLightPosition.xyz;
-	AtmosphereLightDirection0 = mul(LocalReferencial, AtmosphereLightDirection0);
-	float3 AtmosphereLightDirection1 = _AdditionalLightsPosition[0].xyz;
-	AtmosphereLightDirection1 = mul(LocalReferencial, AtmosphereLightDirection1);
-
-
-	// Move to top atmospehre
-	if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))
-	{
-		// Ray is not intersecting the atmosphere
-		SkyViewLutUAV[int2(PixPos)] = 0.0f;
-		return;
-	}
-
-
-	SamplingSetup Sampling = (SamplingSetup)0;
-	{
-		Sampling.VariableSampleCount = true;
-		Sampling.MinSampleCount = FastSkySampleCountMin;
-		Sampling.MaxSampleCount = FastSkySampleCountMax;
-		Sampling.DistanceToSampleCountMaxInv = FastSkyDistanceToSampleCountMaxInv;
-	}
-	const bool Ground = false;
-	const float DeviceZ = FarDepthValue;
-	const bool MieRayPhase = true;
-	const float AerialPespectiveViewDistanceScale = 1.0f;
-	SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
-		float4(PixPos, 0.0f, 1.0f), WorldPos, WorldDir,
-		Ground, Sampling, DeviceZ, MieRayPhase,
-		AtmosphereLightDirection0, AtmosphereLightDirection1,
-		AtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-		SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-		AerialPespectiveViewDistanceScale);
-
-	const float Transmittance = dot(ss.Transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-	SkyViewLutUAV[int2(PixPos)] = float4(ss.L, Transmittance);
-}
-
-
-
 ////////////////////////////////////////////////////////////
 // Distant sky light LUT
 ////////////////////////////////////////////////////////////
@@ -1382,7 +1089,7 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	// If it needs to change, we can transform all AtmosphereLightDirection into local basis onder the camera (it would then be view dependent).
 	// Overall this is fine because this sky lighting ambient is used for clouds using a dome and it won't be used in such sky views.
 	// IF needed later, we could compute illuminance for multiple position on earth in a lat/long texture
-	float3 SamplePos = float3(0, 0, BottomRadiusKm + DistantSkyLightSampleAltitude);
+	float3 SamplePos = float3(0, BottomRadiusKm + DistantSkyLightSampleAltitude,  0);
 	float ViewHeight = length(SamplePos);
 
 	// We are going to trace 64 times using 64 parallel threads.
@@ -1390,7 +1097,7 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	// that can then be used to lit clouds in the sky mesh shader graph.
 
 	// Select a direction for this thread
-	const float3 SampleDir = UniformSphereSamplesBuffer[LinearIndex].xyz;
+	const float3 SampleDir = UniformSphereSamplesBuffer[LinearIndex].yzx;
 
 	SamplingSetup Sampling = (SamplingSetup)0;
 	{
@@ -1461,6 +1168,75 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 		// Since this is ran once per scene, we do not have access to view data (VIEWDATA_AVAILABLE==0). 
 		// So this buffer is not pre-exposed today.
 	}
+}
+
+
+////////////////////////////////////////////////////////////
+// Sky View LUT
+////////////////////////////////////////////////////////////
+
+// Even thought the texture can have 3 channels only (see SkyAtmosphereRendering.cpp GetSkyLutTextureFormat)
+// We always write 4 channels as the grey scale transmittance can be used when alpha propagation is enabled.
+RWTexture2D<float4> SkyViewLutUAV;
+
+[numthreads(THREADGROUP_SIZE, THREADGROUP_SIZE, 1)]
+void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
+{
+	float2 PixPos = float2(ThreadId.xy) + 0.5f;
+	float2 UV = PixPos * SkyViewLutSizeAndInvSize.zw;
+
+	float3 WorldPos = GetTranslatedCameraPlanetPos();
+
+	// For the sky view lut to work, and not be distorted, we need to transform the view and light directions 
+	// into a referential with UP being perpendicular to the ground. And with origin at the planet center.
+
+	// This is the local referencial
+	float3x3 LocalReferencial = GetSkyViewLutReferential(SkyViewLutReferential);
+
+	// This is the LUT camera height and position in the local referential
+	float ViewHeight = length(WorldPos);
+	WorldPos = float3(0.0, 0.0, ViewHeight);
+
+	// Get the view direction in this local referential
+	float3 WorldDir;
+	UvToSkyViewLutParams(WorldDir, ViewHeight, UV);
+	// And also both light source direction
+	float3 AtmosphereLightDirection0 = _MainLightPosition.xyz;
+	AtmosphereLightDirection0 = mul(LocalReferencial, AtmosphereLightDirection0);
+	float3 AtmosphereLightDirection1 = _AdditionalLightsPosition[0].xyz;
+	AtmosphereLightDirection1 = mul(LocalReferencial, AtmosphereLightDirection1);
+
+
+	// Move to top atmospehre
+	if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))
+	{
+		// Ray is not intersecting the atmosphere
+		SkyViewLutUAV[int2(PixPos)] = 0.0f;
+		return;
+	}
+
+
+	SamplingSetup Sampling = (SamplingSetup)0;
+	{
+		Sampling.VariableSampleCount = true;
+		Sampling.MinSampleCount = FastSkySampleCountMin;
+		Sampling.MaxSampleCount = FastSkySampleCountMax;
+		Sampling.DistanceToSampleCountMaxInv = FastSkyDistanceToSampleCountMaxInv;
+	}
+	const bool Ground = false;
+	const float DeviceZ = FarDepthValue;
+	const bool MieRayPhase = true;
+	const float AerialPespectiveViewDistanceScale = 1.0f;
+	SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
+		float4(PixPos, 0.0f, 1.0f), WorldPos, WorldDir,
+		Ground, Sampling, DeviceZ, MieRayPhase,
+		AtmosphereLightDirection0, AtmosphereLightDirection1,
+		AtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		AerialPespectiveViewDistanceScale);
+
+	const float Transmittance = dot(ss.Transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+	SkyViewLutUAV[int2(PixPos)] = float4(ss.L, Transmittance);
 }
 
 

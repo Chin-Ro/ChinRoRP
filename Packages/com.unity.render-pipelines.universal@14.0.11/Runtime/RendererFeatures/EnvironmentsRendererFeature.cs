@@ -306,8 +306,11 @@ namespace UnityEngine.Rendering.Universal
         protected override void Dispose(bool disposing)
         {
             m_SkyAtmosphereLookUpTablesPass?.Dispose();
+            m_SkyAtmosphereLookUpTablesPass = null;
             m_SkyAtmospherePass?.Dispose();
+            m_SkyAtmospherePass = null;
             m_SkyAtmosphereAerialPerspectivePass?.Dispose();
+            m_SkyAtmosphereAerialPerspectivePass = null;
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();
@@ -529,6 +532,7 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int UniformSphereSamplesBufferSampleCount = Shader.PropertyToID("UniformSphereSamplesBufferSampleCount");
         public static readonly int DistantSkyLightLutBufferUAV = Shader.PropertyToID("DistantSkyLightLutBufferUAV");
         public static readonly int DistantSkyLightSampleAltitude = Shader.PropertyToID("DistantSkyLightSampleAltitude");
+        public static readonly int DistantSkyLightLutBufferSRV = Shader.PropertyToID("DistantSkyLightLutBufferSRV");
         public static readonly int SourceDiskEnabled = Shader.PropertyToID("SourceDiskEnabled");
         public static readonly int SkyViewLutUAV = Shader.PropertyToID("SkyViewLutUAV");
         public static readonly int SkyViewLutTexture = Shader.PropertyToID("SkyViewLutTexture");
@@ -619,7 +623,6 @@ namespace UnityEngine.Rendering.Universal
         public Vector4 SkyPlanetTranslatedWorldCenterAndViewHeight;
         public Vector4 SkyCameraTranslatedWorldOrigin;
         public Matrix4x4 SkyViewLutReferential;
-        public Matrix4x4 ScreenToTranslatedWorld;
         
         public Vector4 AtmosphereLightColor;
         public Vector4 SecondAtmosphereLightColor;

@@ -31,3 +31,5 @@ MonoBehaviour:
   skyAtmosphereShader: {fileID: 4800000, guid: 32b22cbeb9e24852a4dad7ed1622da10, type: 3}
   skyAtmosphereAerialPerspectiveShader: {fileID: 4800000, guid: 3b6ea214cdf00274595bd19bfff2f062,
     type: 3}
+  skyAtmosphereMaterial: {fileID: 2100000, guid: 497841f5650d8b14596ed9d1aee357ae,
+    type: 2}

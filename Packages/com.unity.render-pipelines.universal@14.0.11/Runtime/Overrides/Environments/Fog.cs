@@ -36,7 +36,7 @@ namespace UnityEngine.Rendering.Universal
         public ClampedFloatParameter fogCutoffDistance = new ClampedFloatParameter(0f, 0f, 200000);
         
         public ClampedFloatParameter inScatterExponent = new ClampedFloatParameter(4f, 2f, 64f);
-        public MinFloatParameter inScatteringStartDistance = new MinFloatParameter(0.0f, 0.0f);
+        public MinFloatParameter inScatteringStartDistance = new MinFloatParameter(100.0f, 0.0f);
         public ColorParameter inScatterColor = new ColorParameter(new Color(0f, 0f, 0f), false, false, true);
         
         public BoolParameter enableLightShafts = new BoolParameter(false, true);
@@ -123,10 +123,13 @@ namespace UnityEngine.Rendering.Universal
                 0, fogStartDistance.value);
             var ExponentialFogParameters2 = new Vector4(fogSecondDensity.value / 10f, fogSecondHeightFalloff.value / 10f,
                fogSecondHeight.value, fogCutoffDistance.value);
+
+            float skyLuminance = SkyAtmosphere.GetSkyLuminanceMultiplier();
+            
             var DirectionalInscatteringColor = new Vector4(
-                inScatterColor.value.r,
-                inScatterColor.value.g,
-                inScatterColor.value.b,
+                inScatterColor.value.r * skyLuminance,
+                inScatterColor.value.g * skyLuminance,
+                inScatterColor.value.b * skyLuminance,
                 inScatterExponent.value
             );
             

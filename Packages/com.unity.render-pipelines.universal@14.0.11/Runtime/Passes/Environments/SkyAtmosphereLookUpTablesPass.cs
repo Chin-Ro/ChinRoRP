@@ -25,7 +25,8 @@ namespace UnityEngine.Rendering.Universal
         private int m_SkyViewLutKernel;
         private int m_CameraAerialPerspectiveVolumeKernel;
 
-        private ComputeBuffer UniformSphereSamplesBuffer = new ComputeBuffer(GroupSize * GroupSize, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured, ComputeBufferMode.Immutable);
+        private ComputeBuffer UniformSphereSamplesBuffer = new ComputeBuffer(GroupSize * GroupSize, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured,
+            ComputeBufferMode.Immutable);
         private ComputeBuffer DistantSkyLightLutBuffer;
         private Vector4[] Dest = new Vector4[GroupSize * GroupSize];
         
@@ -51,8 +52,9 @@ namespace UnityEngine.Rendering.Universal
                     Dest[idx].z = a;
                     Dest[idx].w = 0.0f;
                 }
+                
+                UniformSphereSamplesBuffer.SetData(Dest); 
             }
-            UniformSphereSamplesBuffer.SetData(Dest);
             
             m_TransmittanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderTransmittanceLutCS");
             m_MultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
@@ -91,12 +93,14 @@ namespace UnityEngine.Rendering.Universal
                 DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
             }
 
+            // Sky View LUT
             {
                 descriptor.width = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUTWidth;
                 descriptor.height = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUTHeight;
                 RenderingUtils.ReAllocateIfNeeded(ref SkyAtmosphereViewLutTexture, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "SkyAtmosphereViewLutTexture");
             }
 
+            // Camera Aerial Perspective Volume
             {
                 descriptor.width = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveLUTWidth;
                 descriptor.height = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveLUTWidth;
@@ -160,6 +164,7 @@ namespace UnityEngine.Rendering.Universal
                     cmd.SetComputeBufferParam(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, EnvironmentConstants.DistantSkyLightLutBufferUAV, DistantSkyLightLutBuffer);
                     cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.DistantSkyLightSampleAltitude, SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUTAltitude);
                     cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_DisatantSkyLightLutKernel, 1, 1, 1);
+                    cmd.SetGlobalBuffer(EnvironmentConstants.DistantSkyLightLutBufferSRV, DistantSkyLightLutBuffer);
                 }
 
                 bool bLightDiskEnabled = renderingData.cameraData.cameraType != CameraType.Reflection;
