@@ -1,4 +1,4 @@
-﻿Shader "Hidden/Environments/SkyAtmosphere"
+Shader "Hidden/SkyAtmosphereAerialPerspective"
 {
     Properties
     {
@@ -10,9 +10,12 @@
         
         Pass
         {
-        	Name "Draw Skybox"
+        	Name "SkyAtmosphereAerialPerspective"
         	
-        	Blend One SrcAlpha, One Zero
+        	ZWrite Off
+        	
+        	Blend One SrcAlpha, One Zero // Premultiplied alpha for RGB, preserve alpha for the alpha channel
+        	
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
@@ -23,12 +26,18 @@
             // #define PER_PIXEL_NOISE 1
             #define MULTISCATTERING_APPROX_SAMPLING_ENABLED 1
             #define RENDERSKY_ENABLED 1
-            #define FASTSKY_ENABLED 1
-            // #define FASTAERIALPERSPECTIVE_ENABLED 1
+            // #define FASTSKY_ENABLED 1
+            #define FASTAERIALPERSPECTIVE_ENABLED 1
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 	        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 	        #include "Packages/com.unity.render-pipelines.universal/Shaders/Environments/SkyAtmosphereLookUpTables.compute"
+
+            struct Attributes
+	        {
+	            uint vertexID : SV_VertexID;
+	            UNITY_VERTEX_INPUT_INSTANCE_ID
+	        };
 	        
 	        struct Varyings
 	        {
@@ -36,51 +45,44 @@
 	            float4 vertex : TEXCOORD0;
 	            UNITY_VERTEX_OUTPUT_STEREO
 	        };
-            
-            
 
-        //     struct Attributes
-        // {
-        //     uint vertexID : SV_VertexID;
-        //     UNITY_VERTEX_INPUT_INSTANCE_ID
-        // };
-
-            struct Attributes
-            {
-                float4 vertex : POSITION;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
+            // struct Attributes
+            // {
+            //     float4 vertex : POSITION;
+            //     UNITY_VERTEX_INPUT_INSTANCE_ID
+            // };
 
             
-
-      //       Varyings Vert(Attributes input)
-		    // {
-		    //     Varyings output;
-		    //     UNITY_SETUP_INSTANCE_ID(input);
-		    //     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-		    //     output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
-		    //     //output.uv = GetFullScreenTriangleTexCoord(input.vertexID);
-		    //     return output;
-		    // }
 
             Varyings Vert(Attributes input)
-            {
-                Varyings output;
-                UNITY_SETUP_INSTANCE_ID(input);
-                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-                output.positionCS = TransformObjectToHClip(input.vertex.xyz);
-                output.vertex = input.vertex;
-                return output;
-            }
+		    {
+		        Varyings output;
+		        UNITY_SETUP_INSTANCE_ID(input);
+		        UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+		        output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
+		        //output.uv = GetFullScreenTriangleTexCoord(input.vertexID);
+		        return output;
+		    }
+
+            // Varyings Vert(Attributes input)
+            // {
+            //     Varyings output;
+            //     UNITY_SETUP_INSTANCE_ID(input);
+            //     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+            //     output.positionCS = TransformObjectToHClip(input.vertex.xyz);
+            //     output.vertex = input.vertex;
+            //     return output;
+            // }
             
             float4 Frag(Varyings input) : SV_Target
             {
-                float4 OutLuminance = 0;
-            	float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
+                float4 OutLuminance = float4(0,0,0,1);
             	
+            	float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
                 //float3 WorldDir = SafeNormalize(SafeNormalize(input.vertex.xyz) * 1000000.0f - GetCurrentViewPosition());
-                float3 WorldPos = GetTranslatedCameraPlanetPos();
-
+            	
+            	float3 WorldPos = GetTranslatedCameraPlanetPos();
+            	
             	float2 normalizedScreenUV = input.positionCS.xy * _ScreenSize.zw;
 
                 float3 PreExposedL = 0;
@@ -94,7 +96,7 @@
 				if (CloudLuminanceTransmittance.a > 0.999)
 				{
 					OutLuminance = float4(0.0f, 0.0f, 0.0f, 1.0f);
-					return;
+					// return;
 				}
 
 				const float CloudDepthKm = VolumetricCloudDepthTexture.Load(int3(PixPos, 0)).r;
@@ -110,6 +112,7 @@
 
 				if (DeviceZ == FarDepthValue)
 				{
+					return OutLuminance;
 					// Get the light disk luminance to draw 
 					LuminanceScale = SkyLuminanceFactor;
 				#if SOURCE_DISK_ENABLED
@@ -142,57 +145,56 @@
 				}
 			#endif // SAMPLE_ATMOSPHERE_ON_CLOUDS
 
-            	float ViewHeight = length(WorldPos);
-            #if FASTSKY_ENABLED && RENDERSKY_ENABLED
-            	if (ViewHeight < (TopRadiusKm * PLANET_RADIUS_RATIO_SAFE_EDGE) && DeviceZ == FarDepthValue)
-            	{
-            		float2 UV;
-            		
-            		// The referencial used to build the Sky View lut
-					float3x3 LocalReferencial = GetSkyViewLutReferential(SkyViewLutReferential);
-            		// Input vectors expressed in this referencial: Up is always Z. Also note that ViewHeight is unchanged in this referencial.
-					float3 WorldPosLocal = float3(0.0, 0.0, ViewHeight);
-					float3 UpVectorLocal = float3(0.0, 0.0, 1.0);
-					float3 WorldDirLocal = mul(LocalReferencial, WorldDir);
-					float ViewZenithCosAngle = dot(WorldDirLocal, UpVectorLocal);
-     
-            		// Now evaluate inputs in the referential
-					bool IntersectGround = RaySphereIntersectNearest(WorldPosLocal, WorldDirLocal, float3(0, 0, 0), BottomRadiusKm) >= 0.0f;
-            		SkyViewLutParamsToUv(IntersectGround, ViewZenithCosAngle, WorldDirLocal, ViewHeight, BottomRadiusKm, SkyViewLutSizeAndInvSize, UV);
-            		float4 SkyLuminanceTransmittance = SkyViewLutTexture.SampleLevel(sampler_LinearClamp, UV, 0);
-					float3 SkyLuminance = SkyLuminanceTransmittance.rgb;
-     
-            		float3 SkyGreyTransmittance = 1.0f;
-					UNITY_FLATTEN
-					if(bPropagateAlphaNonReflection > 0)
-					{
-						SkyGreyTransmittance = SkyLuminanceTransmittance.aaa;
-					}
-     
-					PreExposedL += SkyLuminance * LuminanceScale * (ViewOneOverPreExposure * OutputPreExposure);
-     
-					OutLuminance = PrepareOutput(PreExposedL, SkyGreyTransmittance);
-					UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
-			return OutLuminance;
-            	}
-            #endif
-            	
-            	
+            	// float ViewHeight = length(WorldPos);
+     //        #if FASTSKY_ENABLED && RENDERSKY_ENABLED
+     //        	if (ViewHeight < (TopRadiusKm * PLANET_RADIUS_RATIO_SAFE_EDGE) && DeviceZ == FarDepthValue)
+     //        	{
+     //        		float2 UV;
+     //        		
+     //        		// The referencial used to build the Sky View lut
+					// float3x3 LocalReferencial = GetSkyViewLutReferential(SkyViewLutReferential);
+     //        		// Input vectors expressed in this referencial: Up is always Z. Also note that ViewHeight is unchanged in this referencial.
+					// float3 WorldPosLocal = float3(0.0, 0.0, ViewHeight);
+					// float3 UpVectorLocal = float3(0.0, 0.0, 1.0);
+					// float3 WorldDirLocal = mul(LocalReferencial, WorldDir);
+					// float ViewZenithCosAngle = dot(WorldDirLocal, UpVectorLocal);
+     //
+     //        		// Now evaluate inputs in the referential
+					// bool IntersectGround = RaySphereIntersectNearest(WorldPosLocal, WorldDirLocal, float3(0, 0, 0), BottomRadiusKm) >= 0.0f;
+     //        		SkyViewLutParamsToUv(IntersectGround, ViewZenithCosAngle, WorldDirLocal, ViewHeight, BottomRadiusKm, SkyViewLutSizeAndInvSize, UV);
+     //        		float4 SkyLuminanceTransmittance = SkyViewLutTexture.SampleLevel(sampler_LinearClamp, UV, 0);
+					// float3 SkyLuminance = SkyLuminanceTransmittance.rgb;
+     //
+     //        		float3 SkyGreyTransmittance = 1.0f;
+					// UNITY_FLATTEN
+					// if(bPropagateAlphaNonReflection > 0)
+					// {
+					// 	SkyGreyTransmittance = SkyLuminanceTransmittance.aaa;
+					// }
+     //
+					// PreExposedL += SkyLuminance * LuminanceScale * (ViewOneOverPreExposure * OutputPreExposure);
+     //
+					// OutLuminance = PrepareOutput(PreExposedL, SkyGreyTransmittance);
+					// UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
+					// return 0;
+     //        	}
+     //        #endif
+
             #if FASTAERIALPERSPECTIVE_ENABLED
             	#if COLORED_TRANSMITTANCE_ENABLED
 				#error The FASTAERIALPERSPECTIVE_ENABLED path does not support COLORED_TRANSMITTANCE_ENABLED.
 				#else
-    
-            		float2 NDC = input.positionCS.xy * _ScreenSize.zw;
-					float3 DepthBufferTranslatedWorldPos = ComputeWorldSpacePosition(NDC, DeviceZ, UNITY_MATRIX_I_VP).xyz;
-					float4 NDCPosition = ComputeScreenPos(input.positionCS);
-    
+
+            		float2 ndc = (input.positionCS.xy) * _ScreenSize.zw;
+					float3 DepthBufferTranslatedWorldPos = ComputeWorldSpacePosition(ndc, DeviceZ, UNITY_MATRIX_I_VP).xyz;
+					float4 NDCPosition = mul(DepthBufferTranslatedWorldPos, UNITY_MATRIX_VP);
+
             		PositionInputs posInput = GetPositionInput(input.positionCS.xy, _ScreenSize.zw, DeviceZ, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
     
 					const float NearFadeOutRangeInvDepthKm = 1.0 / 0.001f; // 1 meter fade region
 					float4 AP = GetAerialPerspectiveLuminanceTransmittance(
 						false, float4(0,0,1,1),
-						posInput.positionNDC, (DepthBufferTranslatedWorldPos - GetCameraTranslatedWorldPos()) * M_TO_SKY_UNIT,
+						posInput.positionNDC, (DepthBufferTranslatedWorldPos - GetCurrentViewPosition()) * M_TO_SKY_UNIT,
 						CameraAerialPerspectiveVolumeTexture, sampler_LinearClamp,
 						CameraAerialPerspectiveVolumeDepthResolutionInv,
 						CameraAerialPerspectiveVolumeDepthResolution,
@@ -207,12 +209,11 @@
     
 					OutLuminance = PrepareOutput(PreExposedL, float3(Transmittance, Transmittance, Transmittance));
 					UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);
+            	
 					return OutLuminance;
 				#endif
             #else
-    
-            	// WorldDir = float3(-WorldDir.z, -WorldDir.x, WorldDir.y);
-            	// WorldPos = float3(-WorldPos.z, -WorldPos.x, WorldPos.y);
+            	
             	// Move to top atmosphere as the starting point for ray marching.
 				// This is critical to be after the above to not disrupt above atmosphere tests and voxel selection.
 				if (!MoveToTopAtmosphere(WorldPos, WorldDir, TopRadiusKm))

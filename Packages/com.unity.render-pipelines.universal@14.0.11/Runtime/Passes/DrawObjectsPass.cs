@@ -143,6 +143,12 @@ namespace UnityEngine.Rendering.Universal.Internal
         /// <inheritdoc/>
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
+            bool isRendererDeferred = renderingData.cameraData.renderer is UniversalRenderer { renderingModeRequested: RenderingMode.Deferred };
+            if (!isRendererDeferred && m_FilteringSettings.renderQueueRange == RenderQueueRange.opaque)
+            {
+                renderingData.commandBuffer.ClearRenderTarget(false, true, Color.clear);
+            }
+            
             m_PassData.m_IsOpaque = m_IsOpaque;
             m_PassData.m_RenderingData = renderingData;
             m_PassData.m_RenderStateBlock = m_RenderStateBlock;

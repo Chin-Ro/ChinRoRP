@@ -117,6 +117,8 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
+            renderingData.commandBuffer.ClearRenderTarget(false, true, Color.clear);
+            
             var cmd = renderingData.commandBuffer;
             m_PassData.filteringSettings = m_FilteringSettings;
             using (new ProfilingScope(cmd, m_ProfilingSampler))

@@ -134,7 +134,7 @@ float3 SampleMainLightCookieVolumetric(float3 samplePositionWS)
 
 float4 EvaluateLight_Directional(PositionInputs posInput, Light light)
 {
-    float4 color = float4(light.color + DirectionalInscatteringColor.rgb * _MainLightColor.a, 1.0);
+    float4 color = float4(light.color + DirectionalInscatteringColor.rgb * _MainLightColor, 1.0);
 
     float3 L = light.direction;
 

@@ -3,6 +3,8 @@
 
 #define FarDepthValue (UNITY_REVERSED_Z ? 0 : 1)
 
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Environments/SkyUtils.hlsl"
+
 // Controlls Atmosphere. struct access as not all shaders have access to thi
 #ifndef AP_SUPPORT_SAMPLE_ATMOSHPERE
 	#define AP_SUPPORT_SAMPLE_ATMOSHPERE 1
@@ -100,7 +102,7 @@ float4 SvPositionToScreenPosition(float4 SvPosition)
 	float2 PixelPos = SvPosition.xy;	
 
 	// NDC (NormalizedDeviceCoordinates, after the perspective divide)
-	float3 NDCPos = float3( (PixelPos * _ScreenSize.zw - 0.5) * float2(2, 2), SvPosition.z);
+	float3 NDCPos = float3( (PixelPos * _ScreenSize.zw - 0.5) * float2(2, -2), SvPosition.z);
 
 	// SvPosition.w: so .w has the SceneDepth, some mobile code and the DepthFade material expression wants that
 	return float4(NDCPos.xyz, 1) * SvPosition.w;
@@ -116,10 +118,12 @@ float2 GetScreenPositionForProjectionType(float2 ScreenPosition, float SceneDept
 
 float3 GetScreenWorldDir(in float4 SVPos)
 {
+	return  GetSkyViewDirWS(SVPos.xy);
+	
 	float2 ScreenPosition = SvPositionToScreenPosition(SVPos).xy;
 	const float Depth = 10000.0f;
 	float4 TranslatedWorldPos = mul(float4(GetScreenPositionForProjectionType(ScreenPosition, Depth), Depth, 1), ScreenToTranslatedWorld);
-	return normalize(float3(SVPos.xy, Depth));
+	return normalize(TranslatedWorldPos - GetCameraPositionWS());
 }
 
 float2 FromUnitToSubUvs(float2 uv, float4 SizeAndInvSize) { return (uv + 0.5f * SizeAndInvSize.zw) * (SizeAndInvSize.xy / (SizeAndInvSize.xy + 1.0f)); }
@@ -128,7 +132,7 @@ float2 FromSubUvsToUnit(float2 uv, float4 SizeAndInvSize) { return (uv - 0.5f * 
 
 float4 GetAerialPerspectiveLuminanceTransmittance(
 	bool ViewIsRealTimeReflectionCapture, float4 CameraAerialPerspectiveVolumeSizeAndInvSize,
-	float4 NDC, float3 WorldPositionRelativeToCamera,
+	float2 NDC, float3 WorldPositionRelativeToCamera,
 	Texture3D<float4> AerialPerspectiveVolumeTexture, SamplerState AerialPerspectiveVolumeTextureSampler,
 	float AerialPerspectiveVolumeDepthResolutionInv,
 	float AerialPerspectiveVolumeDepthResolution,
@@ -149,7 +153,8 @@ float4 GetAerialPerspectiveLuminanceTransmittance(
 	// 	WorldPositionRelativeToCamera += (GetTranslatedWorldCameraPosFromView(SvPosXY, true) * M_TO_SKY_UNIT) + WorldPositionRelativeToCamera;
 	// }
 	
-	float2 ScreenUv = (NDC.xy / NDC.ww) * float2(0.5f, -0.5f) + 0.5f;
+	// float2 ScreenUv = (NDC.xy / NDC.ww) * float2(0.5f, -0.5f) + 0.5f;
+	float2 ScreenUv = NDC;
 
 	float tDepth = max(0.0f, length(WorldPositionRelativeToCamera) - AerialPerspectiveVolumeStartDepth);
 
@@ -167,31 +172,31 @@ float4 GetAerialPerspectiveLuminanceTransmittance(
 	}
 	Weight *= saturate(tDepth * NearFadeOutRangeInvDepthKm);
 
-#if AP_SUPPORT_REALTIME_REFLECTION_CAPTURE
-	if (ViewIsRealTimeReflectionCapture)
-	{
-		// We modify ScreenUv to sample the correct AP accordign to 360 reflection AP LUT.
-		// This is the inverse of what is in RenderCameraAerialPerspectiveVolumeCS.
-		float3 WorldDir = normalize(WorldPositionRelativeToCamera);
-
-		float SinPhi = WorldDir.z;
-		float CosPhi = sqrt(1.0f - SinPhi * SinPhi);
-		ScreenUv.y = WorldDir.z * 0.5f + 0.5f;
-
-		float CosTheta = WorldDir.x / CosPhi;
-		float SinTheta = WorldDir.y / CosPhi;
-		float Theta = acos(CosTheta);
-		Theta = SinTheta < 0.0f ? (PI-Theta) + PI : Theta;
-		ScreenUv.x = Theta / (2.0 * PI);
-
-		ScreenUv = FromUnitToSubUvs(ScreenUv, CameraAerialPerspectiveVolumeSizeAndInvSize);
-	}
-#endif
+// #if AP_SUPPORT_REALTIME_REFLECTION_CAPTURE
+// 	if (ViewIsRealTimeReflectionCapture)
+// 	{
+// 		// We modify ScreenUv to sample the correct AP accordign to 360 reflection AP LUT.
+// 		// This is the inverse of what is in RenderCameraAerialPerspectiveVolumeCS.
+// 		float3 WorldDir = normalize(WorldPositionRelativeToCamera);
+//
+// 		float SinPhi = WorldDir.z;
+// 		float CosPhi = sqrt(1.0f - SinPhi * SinPhi);
+// 		ScreenUv.y = WorldDir.z * 0.5f + 0.5f;
+//
+// 		float CosTheta = WorldDir.x / CosPhi;
+// 		float SinTheta = WorldDir.y / CosPhi;
+// 		float Theta = acos(CosTheta);
+// 		Theta = SinTheta < 0.0f ? (PI-Theta) + PI : Theta;
+// 		ScreenUv.x = Theta / (2.0 * PI);
+//
+// 		ScreenUv = FromUnitToSubUvs(ScreenUv, CameraAerialPerspectiveVolumeSizeAndInvSize);
+// 	}
+// #endif
 
 	float4 AP = SAMPLE_TEXTURE3D_LOD(AerialPerspectiveVolumeTexture, AerialPerspectiveVolumeTextureSampler, float3(ScreenUv, NonLinW), 0.0f);
 
 	// Lerp to no contribution near the camera (careful as AP contains transmittance)
-	AP.rgb *= Weight;
+	AP.rgb *= Weight * (AP.a);
 	AP.a = 1.0 - (Weight * (1.0f - AP.a));
 
 	// Debug Slices
@@ -218,7 +223,7 @@ float4 GetAerialPerspectiveLuminanceTransmittanceWithFogOver(
 	float AerialPerspectiveVolumeDepthSliceLengthKmInv,
 	float OneOverExposure, float4 FogToApplyOver)
 {
-	const float NearFadeOutRangeInvDepthKm = 1.0 / 0.00001f; // 1 centimeter fade region
+	const float NearFadeOutRangeInvDepthKm = 1.0 / 0.001f; // 1 centimeter fade region
 	float4 AP = GetAerialPerspectiveLuminanceTransmittance(
 		ViewIsRealTimeReflectionCapture, CameraAerialPerspectiveVolumeSizeAndInvSize,
 		NDC, WorldPositionRelativeToCamera,

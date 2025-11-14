@@ -284,9 +284,9 @@ void UvToSkyViewLutParams(out float3 ViewDir, in float ViewHeight, in float2 UV)
 	float CosLongitudeViewCosAngle = cos(LongitudeViewCosAngle);
 	float SinLongitudeViewCosAngle = sqrt(1.0 - CosLongitudeViewCosAngle * CosLongitudeViewCosAngle) * (LongitudeViewCosAngle <= PI ? 1.0f : -1.0f); // Equivalent to sin(LongitudeViewCosAngle)
 	ViewDir = float3(
+		SinViewZenithAngle * CosLongitudeViewCosAngle,
 		SinViewZenithAngle * SinLongitudeViewCosAngle,
-		CosViewZenithAngle,
-		SinViewZenithAngle * CosLongitudeViewCosAngle
+		CosViewZenithAngle
 		);
 }
 
@@ -510,7 +510,8 @@ SingleScatteringResult IntegrateSingleScatteredLuminance(
 #else // SAMPLE_ATMOSPHERE_ON_CLOUDS
 	if (DeviceZ != FarDepthValue)
 	{
-		const float3 DepthBufferTranslatedWorldPosKm = ComputeWorldSpacePosition(float4(SVPos.xy, DeviceZ, 1), UNITY_MATRIX_I_VP).xyz * M_TO_SKY_UNIT;
+		float2 ndc = SVPos.xy * _ScreenSize.zw;
+		const float3 DepthBufferTranslatedWorldPosKm = ComputeWorldSpacePosition(ndc, DeviceZ, UNITY_MATRIX_I_VP).xyz * M_TO_SKY_UNIT;
 		const float3 TraceStartTranslatedWorldPosKm  = WorldPos + SkyPlanetTranslatedWorldCenterAndViewHeight.xyz * M_TO_SKY_UNIT; // apply planet offset to go back to world from planet local referencial.
 		const float3 TraceStartToSurfaceWorldKm = DepthBufferTranslatedWorldPosKm - TraceStartTranslatedWorldPosKm;
 		float tDepth = length(TraceStartToSurfaceWorldKm);
@@ -1128,8 +1129,8 @@ void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	UvToLutTransmittanceParams(ViewHeight, ViewZenithCosAngle, UV);
 
 	//  A few extra needed constants
-	float3 WorldPos = float3(0.0f, ViewHeight, 0.0f);
-	float3 WorldDir = float3(0.0f, ViewZenithCosAngle, sqrt(1.0f - ViewZenithCosAngle * ViewZenithCosAngle));
+	float3 WorldPos = float3(0.0f, 0.0f, ViewHeight);
+	float3 WorldDir = float3(0.0f, sqrt(1.0f - ViewZenithCosAngle * ViewZenithCosAngle), ViewZenithCosAngle);
 
 	SamplingSetup Sampling = (SamplingSetup)0;
 	{
@@ -1139,7 +1140,7 @@ void RenderTransmittanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	const bool Ground = false;
 	const float DeviceZ = FarDepthValue;
 	const bool MieRayPhase = false;
-	const float3 NullLightDirection = float3(0.0f, 1.0f, 0.0f);
+	const float3 NullLightDirection = float3(0.0f, 0.0f, 1.0f);
 	const float3 NullLightIlluminance = float3(0.0f, 0.0f, 0.0f);
 	const float AerialPespectiveViewDistanceScale = 1.0f;
 	SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
@@ -1179,14 +1180,14 @@ void RenderMultiScatteredLuminanceLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	// We do no apply UV transform from sub range here as it has minimal impact.
 
 	float CosLightZenithAngle = (PixPos.x * MultiScatteredLuminanceLutSizeAndInvSize.z) * 2.0f - 1.0f;
-	float3 LightDir = float3(sqrt(saturate(1.0f - CosLightZenithAngle * CosLightZenithAngle)), CosLightZenithAngle, 0.0f);
-	const float3 NullLightDirection = float3(0.0f, 1.0f, 0.0f);
+	float3 LightDir = float3(0.0f, sqrt(saturate(1.0f - CosLightZenithAngle * CosLightZenithAngle)), CosLightZenithAngle);
+	const float3 NullLightDirection = float3(0.0f, 0.0f, 1.0f);
 	const float3 NullLightIlluminance = float3(0.0f, 0.0f, 0.0f);
 	const float3 OneIlluminance = float3(1.0f, 1.0f, 1.0f);  // Assume a pure white light illuminance for the LUT to act as a transfer (be independent of the light, only dependent on the earth)
 	float ViewHeight = BottomRadiusKm + (PixPos.y * MultiScatteredLuminanceLutSizeAndInvSize.w) * (TopRadiusKm - BottomRadiusKm);
 
-	float3 WorldPos = float3(0.0f, ViewHeight, 0.0f);
-	float3 WorldDir = float3(0.0f, 1.0f, 0.0f);
+	float3 WorldPos = float3(0.0f, 0.0f, ViewHeight);
+	float3 WorldDir = float3(0.0f, 0.0f, 1.0f);
 
 	SamplingSetup Sampling = (SamplingSetup)0;
 	{
@@ -1314,7 +1315,7 @@ void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
 
 	// This is the LUT camera height and position in the local referential
 	float ViewHeight = length(WorldPos);
-	WorldPos = float3(0.0, ViewHeight, 0.0);
+	WorldPos = float3(0.0, 0.0, ViewHeight);
 
 	// Get the view direction in this local referential
 	float3 WorldDir;
@@ -1350,8 +1351,8 @@ void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
 		float4(PixPos, 0.0f, 1.0f), WorldPos, WorldDir,
 		Ground, Sampling, DeviceZ, MieRayPhase,
 		AtmosphereLightDirection0, AtmosphereLightDirection1,
-		_MainLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-		_AdditionalLightsColor[0].rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		AtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
 		AerialPespectiveViewDistanceScale);
 
 	const float Transmittance = dot(ss.Transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
@@ -1366,11 +1367,6 @@ void RenderSkyViewLutCS(uint3 ThreadId : SV_DispatchThreadID)
 
 // see SkyAtmosphereRendering.cpp GetSkyLutTextureFormat
 RWStructuredBuffer<float4> DistantSkyLightLutBufferUAV;
-//Buffer<float4> UniformSphereSamplesBuffer;
-float4 AtmosphereLightDirection0;
-float4 AtmosphereLightDirection1;
-float4 AtmosphereLightIlluminanceOuterSpace0;
-float4 AtmosphereLightIlluminanceOuterSpace1;
 float DistantSkyLightSampleAltitude;
 
 groupshared float3 GroupSkyLuminanceSamples[THREADGROUP_SIZE*THREADGROUP_SIZE];
@@ -1386,7 +1382,7 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	// If it needs to change, we can transform all AtmosphereLightDirection into local basis onder the camera (it would then be view dependent).
 	// Overall this is fine because this sky lighting ambient is used for clouds using a dome and it won't be used in such sky views.
 	// IF needed later, we could compute illuminance for multiple position on earth in a lat/long texture
-	float3 SamplePos = float3(0, BottomRadiusKm + DistantSkyLightSampleAltitude, 0);
+	float3 SamplePos = float3(0, 0, BottomRadiusKm + DistantSkyLightSampleAltitude);
 	float ViewHeight = length(SamplePos);
 
 	// We are going to trace 64 times using 64 parallel threads.
@@ -1408,9 +1404,9 @@ void RenderDistantSkyLightLutCS(uint3 ThreadId : SV_DispatchThreadID)
 	SingleScatteringResult ss = IntegrateSingleScatteredLuminance(
 		float4(PixPos, 0.0f, 1.0f), SamplePos, SampleDir,
 		Ground, Sampling, DeviceZ, MieRayPhase,
-		AtmosphereLightDirection0.xyz, AtmosphereLightDirection1.xyz, 
-		AtmosphereLightIlluminanceOuterSpace0.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-		AtmosphereLightIlluminanceOuterSpace1.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		_MainLightPosition.xyz, _AdditionalLightsPosition[0].xyz, 
+		AtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
 		AerialPespectiveViewDistanceScale);
 
 	GroupSkyLuminanceSamples[LinearIndex] = ss.L * SkyLuminanceFactor;
@@ -1497,8 +1493,17 @@ void RenderCameraAerialPerspectiveVolumeCS(uint3 ThreadId : SV_DispatchThreadID)
 	float2 UV = PixPos  * CameraAerialPerspectiveVolumeSizeAndInvSize.zw;
 
 	float4 SVPos = float4(UV * _ScreenSize.xy, 0.0f, 1.0f);// SV_POS as if resolution was the one from the scene view.
-	float3 WorldDir =  GetScreenWorldDir(SVPos);
+	
+	float3 WorldDir = GetScreenWorldDir(SVPos);
+	// WorldDir.z = -WorldDir.z; // Invert Z axis to match the proper handedness of the planet local space
+	// WorldDir.x = -WorldDir.x; // Invert X axis to match the proper handedness of the planet local space
+	//WorldDir = float3(WorldDir.z, WorldDir.x, WorldDir.y); // Rotate to planet local space (Z up)
 	float3 CamPos = GetTranslatedCameraPlanetPos();
+	
+	// CamPos.z = -CamPos.z;
+	// CamPos.x = -CamPos.x;
+	//CamPos = float3(CamPos.z, CamPos.x, CamPos.y); // Rotate to planet local space (Z up)
+	
 	// if (unity_OrthoParams.w)
 	// {
 	// 	CamPos += GetTranslatedWorldCameraPosFromView(SVPos.xy, true);
@@ -1631,8 +1636,8 @@ void RenderCameraAerialPerspectiveVolumeCS(uint3 ThreadId : SV_DispatchThreadID)
 		float4(PixPos, 0.0f, 1.0f), RayStartWorldPos, WorldDir,
 		Ground, Sampling, DeviceZ, MieRayPhase,
 		_MainLightPosition.xyz, _AdditionalLightsPosition[0].xyz, 
-		_MainLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
-		_AdditionalLightsColor[0].rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		AtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
+		SecondAtmosphereLightColor.rgb * SkyAndAerialPerspectiveLuminanceFactor,
 		AerialPespectiveViewDistanceScale,
 		tMaxMax);
 

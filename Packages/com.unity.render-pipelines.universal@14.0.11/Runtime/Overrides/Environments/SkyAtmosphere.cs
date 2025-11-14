@@ -23,13 +23,14 @@ namespace UnityEngine.Rendering.Universal
         public BoolParameter enable = new BoolParameter(false);
         
         [Header("Light Source")]
+        public MinFloatParameter SkyLuminanceMultiplier = new MinFloatParameter(25.0f, 0.0f);
         public ClampedFloatParameter LightSourceAngle = new ClampedFloatParameter(0.5357f, 0.0f, 5.0f);
         public ClampedFloatParameter SecondLightSourceAngle = new ClampedFloatParameter(0.5357f, 0.0f, 5.0f);
         
         [Header("Planet")]
         public SkyAtmosphereTransformMode TransforMode = new SkyAtmosphereTransformMode(ESkyAtmosphereTransformMode.PlanetTopAtAbsoluteWorldOrigin, false);
         public ClampedFloatParameter BottomRadius = new ClampedFloatParameter(EarthBottomRadius, 1.0f, 7000.0f);
-        public ColorParameter GroundAlbedo = new ColorParameter(new Color32(170,170,170,255), false, false, true);
+        public ColorParameter GroundAlbedo = new ColorParameter(new Color(0.402f, 0.402f,0.402f), false, false, true);
 
         [Header("Atmosphere")] 
         public ClampedFloatParameter AtmosphereHeight = new ClampedFloatParameter(EarthTopRadius - EarthBottomRadius, 1.0f, 200.0f);
@@ -60,7 +61,7 @@ namespace UnityEngine.Rendering.Universal
         public ColorParameter SkyLuminanceFactor = new ColorParameter(Color.white, false, false,true);
         public ColorParameter SkyAndAerialPerspectiveLuminanceFactor = new ColorParameter(Color.white, false, false, true);
         public ClampedFloatParameter AerialPespectiveViewDistanceScale = new ClampedFloatParameter(1.0f, 0.0f, 3.0f);
-        public ClampedFloatParameter HeightFogContribution = new ClampedFloatParameter(0.1f, 0.0f, 1.0f);
+        public ClampedFloatParameter HeightFogContribution = new ClampedFloatParameter(1f, 0.0f, 1.0f);
         public ClampedFloatParameter TransmittanceMinLightElevationAngle = new ClampedFloatParameter(-90.0f, -90.0f, 90.0f);
         public ClampedFloatParameter AerialPerspectiveStartDepth = new ClampedFloatParameter(0.1f, 0.001f, 10.0f);
         
@@ -174,22 +175,43 @@ namespace UnityEngine.Rendering.Universal
             cb.SkyPlanetTranslatedWorldCenterAndViewHeight = TempSkyPlanetData;
             cb.SkyViewLutReferential = SkyViewLutReferential;
             cb.SkyCameraTranslatedWorldOrigin = SkyCameraTranslatedWorldOrigin;
-            Matrix4x4 ScreenToClipMatrix = new Matrix4x4(
-                new Vector4(1, 0, 0, 0), 
-                new Vector4(0, 1, 0, 0), 
-                new Vector4(0,0, renderingData.cameraData.GetProjectionMatrix().m22, renderingData.cameraData.GetProjectionMatrix().m23),
-                new Vector4(0,0, -1,0));
-            cb.ScreenToTranslatedWorld = ScreenToClipMatrix * renderingData.cameraData.GetProjectionMatrix().inverse * renderingData.cameraData.GetViewMatrix().inverse;
+            // Camera camera = renderingData.cameraData.camera;
+            // float fovY = camera.fieldOfView * Mathf.Deg2Rad;
+            // float tanHalfFov = Mathf.Tan(fovY * 0.5f);
+            //
+            // float m00 = 1.0f / (camera.aspect * tanHalfFov);
+            // float m11 = 1.0f / tanHalfFov;
+            // float m22 = camera.nearClipPlane / (camera.nearClipPlane - camera.farClipPlane);
+            // float m23 = (camera.farClipPlane * camera.nearClipPlane) / (camera.nearClipPlane - camera.farClipPlane);
+            //
+            // Matrix4x4 ProjectionMatrix = new Matrix4x4
+            // (
+            //     new Vector4(m00, 0, 0, 0),
+            //     new Vector4(0, m11, 0, 0),
+            //     new Vector4(0, 0, m22, m23),
+            //     new Vector4(0, 0, 1, 0)
+            //     );
+            //
+            // Matrix4x4 ScreenToClipMatrix = new Matrix4x4(
+            //     new Vector4(1, 0, 0, 0), 
+            //     new Vector4(0, 1, 0, 0), 
+            //     new Vector4(0,0, ProjectionMatrix.m22, ProjectionMatrix.m32),
+            //     new Vector4(0,0, 0,0));
+            //
+            // cb.ScreenToTranslatedWorld = CreateScreenToTranslatedWorldMatrix(camera);
+            //cb.ScreenToTranslatedWorld = ScreenToClipMatrix * (renderingData.cameraData.GetGPUProjectionMatrix().inverse * renderingData.cameraData.GetViewMatrix().inverse);
             
             int mainLightIndex = renderingData.lightData.mainLightIndex;
             float SunSolidAngle = 2.0f * Mathf.PI * (1.0f - Mathf.Cos(0.5f * LightSourceAngle.value * Mathf.Deg2Rad));			// Solid angle from aperture https://en.wikipedia.org/wiki/Solid_angle 
-            Color SunDiskOuterSpaceLuminance = renderingData.lightData.visibleLights[mainLightIndex].light.color / (SunSolidAngle * Mathf.PI);
+            Color SunDiskOuterSpaceLuminance = renderingData.lightData.visibleLights[mainLightIndex].finalColor / (SunSolidAngle * Mathf.PI);
+            cb.AtmosphereLightColor = renderingData.lightData.visibleLights[mainLightIndex].finalColor * SkyLuminanceMultiplier.value;
             cb.AtmosphereLightDiscLuminance = new Vector4(SunDiskOuterSpaceLuminance.r, SunDiskOuterSpaceLuminance.g, SunDiskOuterSpaceLuminance.b, 0.0f);
             cb.AtmosphereLightDiscCosHalfApexAngle_PPTrans = Mathf.Cos(0.5f * LightSourceAngle.value * Mathf.Deg2Rad);
             if (renderingData.lightData is { additionalLightsCount: > 0 } && renderingData.lightData.visibleLights[1].lightType == LightType.Directional)
             {
                 float SecondSunSolidAngle = 2.0f * Mathf.PI * (1.0f - Mathf.Cos(0.5f * SecondLightSourceAngle.value * Mathf.Deg2Rad));
-                Color SecondSunDiskOuterSpaceLuminance = renderingData.lightData.visibleLights[1].light.color / (SecondSunSolidAngle * Mathf.PI);
+                Color SecondSunDiskOuterSpaceLuminance = renderingData.lightData.visibleLights[1].finalColor / (SecondSunSolidAngle * Mathf.PI);
+                cb.SecondAtmosphereLightColor = renderingData.lightData.visibleLights[1].finalColor * SkyLuminanceMultiplier.value;
                 cb.SecondAtmosphereLightDiscLuminance = new Vector4(SecondSunDiskOuterSpaceLuminance.r, SecondSunDiskOuterSpaceLuminance.g, SecondSunDiskOuterSpaceLuminance.b, 0.0f);
                 cb.SecondAtmosphereLightDiscCosHalfApexAngle_PPTrans = Mathf.Cos(0.5f * SecondLightSourceAngle.value * Mathf.Deg2Rad);
             }
@@ -286,12 +308,12 @@ namespace UnityEngine.Rendering.Universal
                 float Sign = Up.y >= 0.0f ? 1.0f : -1.0f;
                 float a = -1.0f / (Sign + Up.y);
                 float b = Up.x * Up.z * a;
-                Forward = new Vector3(Sign * b, Sign * Up.z,  1 + Sign * a * Mathf.Pow(Up.z, 2.0f));
-                Left = new Vector3(Sign + a * Mathf.Pow(Up.x, 2.0f), Up.x, b);
+                Forward = new Vector3(Sign * b, -Sign * Up.z, 1 + Sign * a * Mathf.Pow(Up.z, 2.0f));
+                Left = new Vector3(Sign + a * Mathf.Pow(Up.x, 2.0f), -Up.x, b);
 
-                SkyViewLutReferential.SetColumn(0, Left);
-                SkyViewLutReferential.SetColumn(1, Up);
-                SkyViewLutReferential.SetColumn(2, Forward);
+                SkyViewLutReferential.SetColumn(0, -Forward);
+                SkyViewLutReferential.SetColumn(1, Left);
+                SkyViewLutReferential.SetColumn(2, Up);
                 SkyViewLutReferential = SkyViewLutReferential.transpose;
             }
             else
@@ -299,9 +321,9 @@ namespace UnityEngine.Rendering.Universal
                 // This is better as it should be more stable with respect to camera forward.
                 Forward = Vector3.Cross(Up, Left);
                 Forward.Normalize();
-                SkyViewLutReferential.SetColumn(0, Left);
-                SkyViewLutReferential.SetColumn(1, Up);
-                SkyViewLutReferential.SetColumn(2, Forward);
+                SkyViewLutReferential.SetColumn(0, -Forward);
+                SkyViewLutReferential.SetColumn(1, Left);
+                SkyViewLutReferential.SetColumn(2, Up);
                 SkyViewLutReferential = SkyViewLutReferential.transpose;
             }
         }

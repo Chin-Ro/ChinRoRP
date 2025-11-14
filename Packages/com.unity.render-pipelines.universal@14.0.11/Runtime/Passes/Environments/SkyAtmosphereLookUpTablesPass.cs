@@ -163,7 +163,7 @@ namespace UnityEngine.Rendering.Universal
                 }
 
                 bool bLightDiskEnabled = renderingData.cameraData.cameraType != CameraType.Reflection;
-                float AerialPerspectiveStartDepthInM = GetValidAerialPerspectiveStartDepthInM(skyAtmosphere, renderingData.cameraData.camera);
+                float AerialPerspectiveStartDepthInM = SkyAtmosphereUtils.GetValidAerialPerspectiveStartDepthInM(skyAtmosphere, renderingData.cameraData.camera);
                 
                 // Sky View LUT todo: Cloud part
                 {
@@ -195,7 +195,7 @@ namespace UnityEngine.Rendering.Universal
                     // cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeMieOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly);
                     // cmd.SetComputeTextureParam(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, EnvironmentConstants.CameraAerialPerspectiveVolumeRayOnlyUAV, SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly);
                     
-                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.AerialPerspectiveStartDepthInM, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
+                    cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.AerialPerspectiveStartDepthKm, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
                     cmd.SetComputeFloatParam(m_SkyAtmosphereLookUpTablesCS, EnvironmentConstants.RealTimeReflection360Mode, 0.0f);
                     
                     int threadGroupX = UniversalUtils.DivRoundUp(SkyAtmosphereCameraAerialPerspectiveVolume.rt.width, 4);
@@ -203,7 +203,7 @@ namespace UnityEngine.Rendering.Universal
                     int threadGroupZ = UniversalUtils.DivRoundUp(SkyAtmosphereCameraAerialPerspectiveVolume.rt.volumeDepth, 4);
                     
                     cmd.DispatchCompute(m_SkyAtmosphereLookUpTablesCS, m_CameraAerialPerspectiveVolumeKernel, threadGroupX, threadGroupY, threadGroupZ);
-                    cmd.SetGlobalTexture(EnvironmentConstants.CameraAerialPerspectiveVolumeUAV, SkyAtmosphereCameraAerialPerspectiveVolume);
+                    cmd.SetGlobalTexture(EnvironmentConstants.CameraAerialPerspectiveVolumeTexture, SkyAtmosphereCameraAerialPerspectiveVolume);
                 }
             }
         }
@@ -218,15 +218,6 @@ namespace UnityEngine.Rendering.Universal
             SkyAtmosphereCameraAerialPerspectiveVolume?.Release();
             SkyAtmosphereCameraAerialPerspectiveVolumeMieOnly?.Release();
             SkyAtmosphereCameraAerialPerspectiveVolumeRayOnly?.Release();
-        }
-        
-        float GetValidAerialPerspectiveStartDepthInM(SkyAtmosphere skyAtmosphere, Camera camera)
-        {
-            float AerialPerspectiveStartDepthKm = skyAtmosphere.AerialPerspectiveStartDepth.value;
-            AerialPerspectiveStartDepthKm = AerialPerspectiveStartDepthKm < 0.0f ? 0.0f : AerialPerspectiveStartDepthKm;
-            // For sky reflection capture, the start depth can be super large. So we max it to make sure the triangle is never in front the NearClippingDistance.
-            float StartDepthInM = Mathf.Max(AerialPerspectiveStartDepthKm * SkyAtmosphereUtils.KM_TO_M, camera.nearClipPlane);
-            return StartDepthInM;
         }
     }
 }

@@ -55,6 +55,7 @@ namespace UnityEngine.Rendering.Universal
 
         private SkyAtmosphereLookUpTablesPass m_SkyAtmosphereLookUpTablesPass;
         private SkyAtmospherePass m_SkyAtmospherePass;
+        private SkyAtmosphereAerialPerspectivePass m_SkyAtmosphereAerialPerspectivePass;
         private GenerateMaxZPass m_GenerateMaxZPass;
         private ClearAndHeightFogVoxelizationPass m_ClearAndHeightFogVoxelizationPass;
         private FogVolumeVoxelizationPass m_FogVolumeVoxelizationPass;
@@ -118,6 +119,7 @@ namespace UnityEngine.Rendering.Universal
             
             m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData);
             m_SkyAtmospherePass ??= new SkyAtmospherePass(environmentsData);
+            m_SkyAtmosphereAerialPerspectivePass ??= new SkyAtmosphereAerialPerspectivePass(environmentsData);
             
             if (volumetricLighting)
             {
@@ -191,6 +193,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 renderer.EnqueuePass(m_SkyAtmosphereLookUpTablesPass);
                 renderer.EnqueuePass(m_SkyAtmospherePass);
+                renderer.EnqueuePass(m_SkyAtmosphereAerialPerspectivePass);
             }
             
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
@@ -304,6 +307,7 @@ namespace UnityEngine.Rendering.Universal
         {
             m_SkyAtmosphereLookUpTablesPass?.Dispose();
             m_SkyAtmospherePass?.Dispose();
+            m_SkyAtmosphereAerialPerspectivePass?.Dispose();
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();
@@ -529,9 +533,10 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int SkyViewLutUAV = Shader.PropertyToID("SkyViewLutUAV");
         public static readonly int SkyViewLutTexture = Shader.PropertyToID("SkyViewLutTexture");
         public static readonly int CameraAerialPerspectiveVolumeUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeUAV");
+        public static readonly int CameraAerialPerspectiveVolumeTexture = Shader.PropertyToID("CameraAerialPerspectiveVolumeTexture");
         public static readonly int CameraAerialPerspectiveVolumeMieOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeMieOnlyUAV");
         public static readonly int CameraAerialPerspectiveVolumeRayOnlyUAV = Shader.PropertyToID("CameraAerialPerspectiveVolumeRayOnlyUAV");
-        public static readonly int AerialPerspectiveStartDepthInM = Shader.PropertyToID("AerialPerspectiveStartDepthInM");
+        public static readonly int AerialPerspectiveStartDepthKm = Shader.PropertyToID("AerialPerspectiveStartDepthKm");
         public static readonly int RealTimeReflection360Mode = Shader.PropertyToID("RealTimeReflection360Mode");
     }
     
@@ -616,6 +621,8 @@ namespace UnityEngine.Rendering.Universal
         public Matrix4x4 SkyViewLutReferential;
         public Matrix4x4 ScreenToTranslatedWorld;
         
+        public Vector4 AtmosphereLightColor;
+        public Vector4 SecondAtmosphereLightColor;
         public Vector4 AtmosphereLightDiscLuminance;
         public Vector4 SecondAtmosphereLightDiscLuminance;
         public float AtmosphereLightDiscCosHalfApexAngle_PPTrans;

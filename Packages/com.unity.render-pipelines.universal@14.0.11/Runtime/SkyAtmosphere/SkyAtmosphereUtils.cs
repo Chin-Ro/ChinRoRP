@@ -139,5 +139,14 @@
         {
             return value < minValue ? minValue : value;
         }
+        
+        internal static float GetValidAerialPerspectiveStartDepthInM(SkyAtmosphere skyAtmosphere, Camera camera)
+        {
+            float AerialPerspectiveStartDepthKm = skyAtmosphere.AerialPerspectiveStartDepth.value;
+            AerialPerspectiveStartDepthKm = AerialPerspectiveStartDepthKm < 0.0f ? 0.0f : AerialPerspectiveStartDepthKm;
+            // For sky reflection capture, the start depth can be super large. So we max it to make sure the triangle is never in front the NearClippingDistance.
+            float StartDepthInM = Mathf.Max(AerialPerspectiveStartDepthKm * SkyAtmosphereUtils.KM_TO_M, camera.nearClipPlane);
+            return StartDepthInM;
+        }
     }
 }

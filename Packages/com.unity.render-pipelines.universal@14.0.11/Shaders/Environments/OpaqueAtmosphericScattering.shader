@@ -39,15 +39,15 @@
         {
             PositionInputs posInput = GetPositionInput(input.positionCS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
 
-            // if (depth == UNITY_RAW_FAR_CLIP_VALUE)
-            // {
-            //     // When a pixel is at far plane, the world space coordinate reconstruction is not reliable.
-            //     // So in order to have a valid position (for example for height fog) we just consider that the sky is a sphere centered on camera with a radius of 5km (arbitrarily chosen value!)
-            //     // And recompute the position on the sphere with the current camera direction.
-            //     posInput.positionWS = GetCurrentViewPosition() - V * _MaxFogDistance;
-            //
-            //     // Warning: we do not modify depth values. Use them with care!
-            // }
+            if (depth == UNITY_RAW_FAR_CLIP_VALUE)
+            {
+                // When a pixel is at far plane, the world space coordinate reconstruction is not reliable.
+                // So in order to have a valid position (for example for height fog) we just consider that the sky is a sphere centered on camera with a radius of 5km (arbitrarily chosen value!)
+                // And recompute the position on the sphere with the current camera direction.
+                posInput.positionWS = GetCurrentViewPosition() - V * -1000000;
+            
+                // Warning: we do not modify depth values. Use them with care!
+            }
 
             EvaluateAtmosphericScattering(posInput, V, input.uv, color, opacity); // Premultiplied alpha
         }

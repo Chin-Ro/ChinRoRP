@@ -13,6 +13,7 @@
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (skyAtmosphereMaterial == null || !SkyAtmosphere.IsSkyAtmosphereEnabled()) return;
+            SkyAtmosphere skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, new ProfilingSampler("SkyAtmosphere")))
             {
@@ -20,7 +21,10 @@
                 // bool bFastSky = SkyAtmosphereUtils.CVarSkyAtmosphereFastSkyLUT > 0;
                 // bool bFastAerialPerspective = SkyAtmosphereUtils.CVarSkyAtmosphereAerialPerspectiveApplyOnOpaque > 0;
                 // bool bRenderSkyPixel = true;
-                
+
+                float AerialPerspectiveStartDepthInM =
+                    SkyAtmosphereUtils.GetValidAerialPerspectiveStartDepthInM(skyAtmosphere, renderingData.cameraData.camera);
+                cmd.SetGlobalFloat(EnvironmentConstants.AerialPerspectiveStartDepthKm, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
                 skyAtmosphereMaterial.SetFloat("DepthReadDisabled", 0.0f);
                 CoreUtils.SetKeyword(skyAtmosphereMaterial, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
                 if (RenderSettings.skybox != skyAtmosphereMaterial)
@@ -32,6 +36,11 @@
                 //CoreUtils.SetKeyword(skyAtmosphereMaterial, "RENDERSKY_ENABLED", bRenderSkyPixel);
             }
         }
+        
+        public void Dispose()
+        {
+            CoreUtils.Destroy(skyAtmosphereMaterial);
+        }
 
         private Material Load(Shader shader)
         {
@@ -42,11 +51,6 @@
             }
 
             return !shader.isSupported ? null : CoreUtils.CreateEngineMaterial(shader);
-        }
-        
-        public void Dispose()
-        {
-            CoreUtils.Destroy(skyAtmosphereMaterial);
         }
     }
 }
