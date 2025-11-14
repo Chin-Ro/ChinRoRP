@@ -4,9 +4,9 @@
     {
         private Material skyAtmosphereMaterial;
         
-        public SkyAtmospherePass(EnvironmentsData data)
+        public SkyAtmospherePass(EnvironmentsData data, RenderPassEvent evt)
         {
-            renderPassEvent = RenderPassEvent.BeforeRenderingSkybox;
+            renderPassEvent = evt;
             skyAtmosphereMaterial = data.skyAtmosphereMaterial;
         }
         

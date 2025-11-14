@@ -117,9 +117,9 @@ namespace UnityEngine.Rendering.Universal
             }
 #endif
             
-            m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData);
-            m_SkyAtmospherePass ??= new SkyAtmospherePass(environmentsData);
-            m_SkyAtmosphereAerialPerspectivePass ??= new SkyAtmosphereAerialPerspectivePass(environmentsData);
+            m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData, RenderPassEvent.BeforeRenderingGbuffer);
+            m_SkyAtmospherePass ??= new SkyAtmospherePass(environmentsData, RenderPassEvent.BeforeRenderingSkybox);
+            m_SkyAtmosphereAerialPerspectivePass ??= new SkyAtmosphereAerialPerspectivePass(environmentsData, RenderPassEvent.AfterRenderingSkybox - 1);
             
             if (volumetricLighting)
             {
@@ -194,6 +194,13 @@ namespace UnityEngine.Rendering.Universal
                 renderer.EnqueuePass(m_SkyAtmosphereLookUpTablesPass);
                 renderer.EnqueuePass(m_SkyAtmospherePass);
                 renderer.EnqueuePass(m_SkyAtmosphereAerialPerspectivePass);
+            }
+            else
+            {
+                if (RenderSettings.skybox == environmentsData.skyAtmosphereMaterial)
+                {
+                    RenderSettings.skybox = null;
+                }
             }
             
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
@@ -311,6 +318,7 @@ namespace UnityEngine.Rendering.Universal
             m_SkyAtmospherePass = null;
             m_SkyAtmosphereAerialPerspectivePass?.Dispose();
             m_SkyAtmosphereAerialPerspectivePass = null;
+            
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();

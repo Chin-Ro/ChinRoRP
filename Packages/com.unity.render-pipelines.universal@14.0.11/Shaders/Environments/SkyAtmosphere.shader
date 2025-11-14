@@ -76,10 +76,13 @@
             float4 Frag(Varyings input) : SV_Target
             {
                 float4 OutLuminance = 0;
-            	// float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
+            	float3 WorldDir = SafeNormalize(GetSkyViewDirWS(input.positionCS.xy));
             	
-                float3 WorldDir = SafeNormalize(SafeNormalize(input.vertex.xyz) * 1000000.0f - GetCurrentViewPosition());
+                //float3 WorldDir = SafeNormalize(SafeNormalize(input.vertex.xyz) * 1000000.0f - GetCurrentViewPosition());
+                //float3 WorldDir = -SafeNormalize(input.vertex.xyz);
+            	//WorldDir = float3(-WorldDir.x, -WorldDir.y, -WorldDir.z); // Adjust to match previous orientation
                 float3 WorldPos = GetTranslatedCameraPlanetPos();
+            	//WorldPos = float3(-WorldPos.x, -WorldPos.x, -WorldPos.y); // Adjust to match previous orientation
 
             	float2 normalizedScreenUV = input.positionCS.xy * _ScreenSize.zw;
 
@@ -147,7 +150,8 @@
             	if (ViewHeight < (TopRadiusKm * PLANET_RADIUS_RATIO_SAFE_EDGE) && DeviceZ == FarDepthValue)
             	{
             		float2 UV;
-            		
+
+            		WorldDir = SafeNormalize(input.vertex.xyz);
             		// The referencial used to build the Sky View lut
 					float3x3 LocalReferencial = GetSkyViewLutReferential(SkyViewLutReferential);
             		// Input vectors expressed in this referencial: Up is always Z. Also note that ViewHeight is unchanged in this referencial.

@@ -4,9 +4,9 @@
     {
         private Material skyAtmosphereAerialPerspectiveMaterial;
         
-        public SkyAtmosphereAerialPerspectivePass(EnvironmentsData data)
+        public SkyAtmosphereAerialPerspectivePass(EnvironmentsData data, RenderPassEvent evt)
         {
-            renderPassEvent = RenderPassEvent.AfterRenderingSkybox;
+            renderPassEvent = evt;
             skyAtmosphereAerialPerspectiveMaterial = Load(data.skyAtmosphereAerialPerspectiveShader);
         }
         

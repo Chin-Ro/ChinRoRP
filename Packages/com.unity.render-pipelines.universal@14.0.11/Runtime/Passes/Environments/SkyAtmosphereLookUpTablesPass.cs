@@ -30,9 +30,9 @@ namespace UnityEngine.Rendering.Universal
         private ComputeBuffer DistantSkyLightLutBuffer;
         private Vector4[] Dest = new Vector4[GroupSize * GroupSize];
         
-        public SkyAtmosphereLookUpTablesPass(EnvironmentsData data)
+        public SkyAtmosphereLookUpTablesPass(EnvironmentsData data, RenderPassEvent evt)
         {
-            renderPassEvent = RenderPassEvent.BeforeRenderingGbuffer;
+            renderPassEvent = evt;
             m_SkyAtmosphereLookUpTablesCS = data.skyAtmosphereLookUpTablesCS;
             
             for (uint i = 0; i < GroupSize; ++i)
