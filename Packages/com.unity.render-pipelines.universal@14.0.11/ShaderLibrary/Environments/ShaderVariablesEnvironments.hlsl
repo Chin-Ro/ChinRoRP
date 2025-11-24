@@ -101,8 +101,8 @@ float4 SkyAndAerialPerspectiveLuminanceFactor;
 float AerialPespectiveViewDistanceScale;
 float FogShowFlagFactor;
 
-float temp1;
-float temp2;
+float SkyAtmosphereEnabled;
+float SkyLuminanceMultiplier;
 
 float4 SkyPlanetTranslatedWorldCenterAndViewHeight;
 float4 SkyCameraTranslatedWorldOrigin;

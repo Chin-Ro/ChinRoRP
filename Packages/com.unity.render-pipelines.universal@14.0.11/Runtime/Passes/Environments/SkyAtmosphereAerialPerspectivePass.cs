@@ -8,6 +8,7 @@
         {
             renderPassEvent = evt;
             skyAtmosphereAerialPerspectiveMaterial = Load(data.skyAtmosphereAerialPerspectiveShader);
+            ConfigureInput(ScriptableRenderPassInput.Depth);
         }
         
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -32,7 +33,7 @@
         {
             if (shader == null)
             {
-                Debug.LogErrorFormat($"Missing shader. {GetType().DeclaringType.Name} render pass will not execute. Check for missing reference in the renderer resources.");
+                Debug.LogErrorFormat($"Missing shader. SkyAtmosphere Aerial Perspective render passes will not execute. Check for missing reference in the renderer resources.");
                 return null;
             }
 

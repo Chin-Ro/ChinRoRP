@@ -55,14 +55,13 @@ namespace UnityEngine.Rendering.Universal
                 
                 UniformSphereSamplesBuffer.SetData(Dest); 
             }
-            
-            m_TransmittanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderTransmittanceLutCS");
-            m_MultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
-            m_DisatantSkyLightLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderDistantSkyLightLutCS");
-            m_SkyViewLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderSkyViewLutCS");
-            m_CameraAerialPerspectiveVolumeKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderCameraAerialPerspectiveVolumeCS");
         }
 
+        public void Setup(ref ComputeBuffer m_DistantSkyLightLutBuffer)
+        {
+            DistantSkyLightLutBuffer = m_DistantSkyLightLutBuffer;
+        }
+        
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             // Transmittance LUT
@@ -88,10 +87,10 @@ namespace UnityEngine.Rendering.Universal
                 RenderingUtils.ReAllocateIfNeeded(ref MultiScatteredLuminanceLut, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "MultiScatteredLuminanceLut");
             }
 
-            if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
-            {
-                DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
-            }
+            // if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
+            // {
+            //     DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
+            // }
 
             // Sky View LUT
             {
@@ -122,6 +121,12 @@ namespace UnityEngine.Rendering.Universal
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (!SkyAtmosphere.IsSkyAtmosphereEnabled() || m_SkyAtmosphereLookUpTablesCS == null) return;
+            
+            m_TransmittanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderTransmittanceLutCS");
+            m_MultiScatteredLuminanceLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderMultiScatteredLuminanceLutCS");
+            m_DisatantSkyLightLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderDistantSkyLightLutCS");
+            m_SkyViewLutKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderSkyViewLutCS");
+            m_CameraAerialPerspectiveVolumeKernel = m_SkyAtmosphereLookUpTablesCS.FindKernel("RenderCameraAerialPerspectiveVolumeCS");
             
             var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
             bool bHighQualityMultiScattering = SkyAtmosphereUtils.CVarSkyAtmosphereMultiScatteringLUTHighQuality > 0.0f;

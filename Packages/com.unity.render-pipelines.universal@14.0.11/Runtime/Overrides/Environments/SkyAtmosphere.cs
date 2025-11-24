@@ -201,6 +201,9 @@ namespace UnityEngine.Rendering.Universal
                 cb.SecondAtmosphereLightDiscLuminance = new Vector4(SecondSunDiskOuterSpaceLuminance.r, SecondSunDiskOuterSpaceLuminance.g, SecondSunDiskOuterSpaceLuminance.b, 0.0f);
                 cb.SecondAtmosphereLightDiscCosHalfApexAngle_PPTrans = Mathf.Cos(0.5f * SecondLightSourceAngle.value * Mathf.Deg2Rad);
             }
+
+            cb.SkyAtmosphereEnabled = 1;
+            cb.SkyLuminanceMultiplier = SkyLuminanceMultiplier.value;
             
             cb.MultiScatteringFactor = atmosphereSetup.MultiScatteringFactor;
             cb.BottomRadiusKm = atmosphereSetup.BottomRadiusKm;
@@ -210,6 +213,7 @@ namespace UnityEngine.Rendering.Universal
             cb.MieScattering = atmosphereSetup.MieScattering;
             cb.MieDensityExpScale = atmosphereSetup.MieDensityExpScale;
             cb.MieExtinction = atmosphereSetup.MieExtinction;
+            
             cb.MiePhaseG = atmosphereSetup.MiePhaseG;
             cb.MieAbsorption = atmosphereSetup.MieAbsorption;
             cb.AbsorptionDensity0LayerWidth = atmosphereSetup.AbsorptionDensity0LayerWidth;

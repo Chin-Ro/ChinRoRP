@@ -82,7 +82,7 @@ namespace UnityEngine.Rendering.Universal
         {
             if (shader == null)
             {
-                Debug.LogErrorFormat($"Missing shader. {GetType().DeclaringType.Name} render pass will not execute. Check for missing reference in the renderer resources.");
+                Debug.LogErrorFormat($"Missing shader. LightShafts render passes will not execute. Check for missing reference in the renderer resources.");
                 return null;
             }
 

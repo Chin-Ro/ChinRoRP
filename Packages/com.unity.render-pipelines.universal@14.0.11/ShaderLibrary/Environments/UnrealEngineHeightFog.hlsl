@@ -108,13 +108,13 @@ float4 GetExponentialHeightFogUE(float3 WorldPositionRelativeToCamera) // camera
             const float UniformPhaseFunction = 1.0f / (4.0f * PI);
             
             // pow(2.71828, 2) * pow(PI, 2) is physical lights to linear lights article value;
-            half3 directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb * _SkyContributeFactor);
+            half3 directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _MainLightColor.a + _MainLightColor.rgb * _SkyContributeFactor * SkyLuminanceMultiplier);
             // Setup a cosine lobe around the light direction to approximate inscattering from the directional light off of the ambient haze;
             half3 DirectionalLightInscattering = directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _MainLightPosition.xyz)), DirectionalInscatteringColor.w) * UniformPhaseFunction;
 
             if (SecondAtmosphereLightColor.a > 0.0f)
             {
-                directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _AdditionalLightsColor[0].a + _AdditionalLightsColor[0].rgb * _SkyContributeFactor);
+                directionalInscatteringColor = (DirectionalInscatteringColor.xyz * _AdditionalLightsColor[0].a + _AdditionalLightsColor[0].rgb * _SkyContributeFactor * SkyLuminanceMultiplier);
                 DirectionalLightInscattering += directionalInscatteringColor * pow(saturate(dot(CameraToReceiverNormalized, _AdditionalLightsPosition[0].xyz)), DirectionalInscatteringColor.w) * UniformPhaseFunction;
             }
 

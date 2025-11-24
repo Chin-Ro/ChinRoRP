@@ -7,7 +7,7 @@
         public SkyAtmospherePass(EnvironmentsData data, RenderPassEvent evt)
         {
             renderPassEvent = evt;
-            skyAtmosphereMaterial = data.skyAtmosphereMaterial;
+            skyAtmosphereMaterial = Load(data.skyAtmosphereShader);
         }
         
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -39,7 +39,26 @@
         
         public void Dispose()
         {
-            
+            if (RenderSettings.skybox == skyAtmosphereMaterial)
+            {
+                RenderSettings.skybox = null;
+            }
+
+            if (skyAtmosphereMaterial)
+            {
+                CoreUtils.Destroy(skyAtmosphereMaterial);
+            }
+        }
+        
+        private Material Load(Shader shader)
+        {
+            if (shader == null)
+            {
+                Debug.LogErrorFormat($"Missing shader. SkyAtmosphere render passes will not execute. Check for missing reference in the renderer resources.");
+                return null;
+            }
+
+            return !shader.isSupported ? null : CoreUtils.CreateEngineMaterial(shader);
         }
     }
 }

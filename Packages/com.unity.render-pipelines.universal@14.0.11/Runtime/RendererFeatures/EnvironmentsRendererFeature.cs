@@ -7,6 +7,7 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Unity.Collections;
+using UnityEngine.Assertions.Must;
 using UnityEngine.Experimental.Rendering;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -73,6 +74,7 @@ namespace UnityEngine.Rendering.Universal
         
         const int k_VolumetricFogPriorityMaxValue = 1048576; // 2^20 because there are 20 bits in the volumetric fog sort key
         
+        ComputeBuffer m_DistantSkyLightLutBuffer = null;
         ComputeBuffer m_VisibleVolumeBoundsBuffer = null;
         GraphicsBuffer m_VolumetricMaterialDataBuffer = null;
         GraphicsBuffer m_VolumetricMaterialIndexBuffer = null;
@@ -197,10 +199,12 @@ namespace UnityEngine.Rendering.Universal
             }
             else
             {
-                if (RenderSettings.skybox == environmentsData.skyAtmosphereMaterial)
+                if (RenderSettings.skybox != null && RenderSettings.skybox.shader == environmentsData.skyAtmosphereShader)
                 {
                     RenderSettings.skybox = null;
                 }
+                m_DistantSkyLightLutBuffer.SetData(new Vector4[] { Vector4.zero });
+                renderingData.commandBuffer.SetGlobalBuffer(EnvironmentConstants.DistantSkyLightLutBufferSRV, m_DistantSkyLightLutBuffer);
             }
             
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
@@ -215,7 +219,7 @@ namespace UnityEngine.Rendering.Universal
                     renderer.EnqueuePass(m_VolumetricLightingPass);
                 }
 
-                bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
+                bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData) && renderingData.cameraData.cameraType != CameraType.Reflection;
                 if (enableLightShafts)
                 {
                     renderer.EnqueuePass(m_LightShaftsPass);
@@ -223,7 +227,7 @@ namespace UnityEngine.Rendering.Universal
             
                 renderer.EnqueuePass(m_OpaqueAtmosphereScatteringPass);
 
-                bool enableLightShaftsBloom = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData);
+                bool enableLightShaftsBloom = enableLightShafts && Fog.IsLightShaftsBloomEnabled(renderingData.cameraData);
                 if (enableLightShaftsBloom)
                 {
                     renderer.EnqueuePass(m_LightShaftsBloomPass);
@@ -235,7 +239,8 @@ namespace UnityEngine.Rendering.Universal
         {
             bool enableFog = Fog.IsFogEnabled(renderingData.cameraData);
             bool enableVolumetricFog = volumetricLighting && Fog.IsVolumetricFogEnabled(renderingData.cameraData);
-            bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData);
+            bool enableLightShafts = renderingData.lightData.mainLightIndex >= 0 && lightShafts && Fog.IsLightShaftsEnabled(renderingData.cameraData) && renderingData.cameraData.cameraType != CameraType.Reflection;
+            bool enableSkyAtmosphere = renderingData.lightData.mainLightIndex >= 0 && SkyAtmosphere.IsSkyAtmosphereEnabled();
             
             EnvironmentsUtils.UpdateShaderVariablesEnvironmentsCB(ref m_ShaderVariablesEnvironments, renderingData, renderingData.cameraData.vBufferParams, s_CurrentVolumetricBufferSize, enableLightShafts, enableVolumetricFog);
             ConstantBuffer.PushGlobal(renderingData.commandBuffer, m_ShaderVariablesEnvironments, EnvironmentConstants._ShaderVariablesEnvironments);
@@ -308,6 +313,21 @@ namespace UnityEngine.Rendering.Universal
                     m_LightShaftsBloomPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
                 }
             }
+
+            if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
+            {
+                m_DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
+            }
+            
+            if (enableSkyAtmosphere)
+            {
+                m_SkyAtmosphereLookUpTablesPass.Setup(ref m_DistantSkyLightLutBuffer);
+            }
+            else
+            {
+                m_DistantSkyLightLutBuffer.SetData(new Vector4[] { Vector4.zero });
+                renderingData.commandBuffer.SetGlobalBuffer(EnvironmentConstants.DistantSkyLightLutBufferSRV, m_DistantSkyLightLutBuffer);
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -318,7 +338,8 @@ namespace UnityEngine.Rendering.Universal
             m_SkyAtmospherePass = null;
             m_SkyAtmosphereAerialPerspectivePass?.Dispose();
             m_SkyAtmosphereAerialPerspectivePass = null;
-            
+            CoreUtils.SafeRelease(m_DistantSkyLightLutBuffer);
+            m_DistantSkyLightLutBuffer = null;
             m_MaxZMask?.Release();
             m_VolumetricDensityBuffer?.Release();
             m_VolumetricLighting?.Release();
@@ -625,8 +646,8 @@ namespace UnityEngine.Rendering.Universal
         public float AerialPespectiveViewDistanceScale;
         public float FogShowFlagFactor;
 
-        public float temp1;
-        public float temp2;
+        public float SkyAtmosphereEnabled;
+        public float SkyLuminanceMultiplier;
 
         public Vector4 SkyPlanetTranslatedWorldCenterAndViewHeight;
         public Vector4 SkyCameraTranslatedWorldOrigin;
@@ -650,12 +671,18 @@ namespace UnityEngine.Rendering.Universal
             var fog = VolumeManager.instance.stack.GetComponent<Fog>();
             fog.UpdateShaderVariablesEnvironmentsCBFogParameters(ref cb, universalCamera, isMainLightingExists, enableLightShafts, enableVolumetricFog);
             VolumetricLightingUtils.UpdateShaderVariablesGlobalVolumetrics(ref cb, universalCamera, vBufferParams, s_CurrentVolumetricBufferSize);
-
-            if (isMainLightingExists)
+            
+            bool enableSkyAtmosphere = isMainLightingExists && SkyAtmosphere.IsSkyAtmosphereEnabled();
+            if (enableSkyAtmosphere)
             {
                 var skyAtmosphere = VolumeManager.instance.stack.GetComponent<SkyAtmosphere>();
                 skyAtmosphere.CopyAtmosphereSetupToUniformShaderParameters(ref cb, renderingData);
                 SkyAtmosphereUtils.SetupSkyAtmosphereInternalCommonParameters(ref cb, skyAtmosphere, renderingData.cameraData);
+            }
+            else
+            {
+                cb.SkyAtmosphereEnabled = 0;
+                cb.SkyLuminanceMultiplier = 0;
             }
         }
     }

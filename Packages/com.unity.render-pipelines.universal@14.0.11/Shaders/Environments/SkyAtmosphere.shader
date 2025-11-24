@@ -7,6 +7,7 @@
     SubShader
     {
         Tags { "Queue"="Background" "RenderType"="Background" "PreviewType"="Skybox" }
+		Cull Off ZWrite Off
         
         Pass
         {
@@ -108,7 +109,8 @@
 			#if  MSAA_SAMPLE_COUNT > 1
 					float DeviceZ = DepthReadDisabled ? FarDepthValue : MSAADepthTexture.Load(int2(PixPos), SampleIndex).x;
 			#else
-					float DeviceZ = DepthReadDisabled ? FarDepthValue : SampleSceneDepth(normalizedScreenUV);
+					//float DeviceZ = DepthReadDisabled ? FarDepthValue : SampleSceneDepth(normalizedScreenUV);
+					float DeviceZ = FarDepthValue;
 			#endif
 
 				if (DeviceZ == FarDepthValue)
