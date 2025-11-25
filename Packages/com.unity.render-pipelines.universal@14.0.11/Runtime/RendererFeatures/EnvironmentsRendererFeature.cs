@@ -118,6 +118,7 @@ namespace UnityEngine.Rendering.Universal
                     AssetDatabase.LoadAssetAtPath<EnvironmentsData>("Packages/com.unity.render-pipelines.universal/Runtime/Data/EnvironmentsData.asset");
             }
 #endif
+            m_DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
             
             m_SkyAtmosphereLookUpTablesPass ??= new SkyAtmosphereLookUpTablesPass(environmentsData, RenderPassEvent.BeforeRenderingGbuffer);
             m_SkyAtmospherePass ??= new SkyAtmospherePass(environmentsData, RenderPassEvent.BeforeRenderingSkybox);
@@ -312,11 +313,6 @@ namespace UnityEngine.Rendering.Universal
                     descriptor.graphicsFormat = renderingData.cameraData.renderer.cameraColorTargetHandle.rt.graphicsFormat;
                     m_LightShaftsBloomPass.Setup(descriptor, lightShaftBlurNumSamples, lightShaftFirstPassDistance);
                 }
-            }
-
-            if (SkyAtmosphereUtils.CVarSkyAtmosphereDistantSkyLightLUT > 0)
-            {
-                m_DistantSkyLightLutBuffer ??= new ComputeBuffer(1, Marshal.SizeOf(typeof(Vector4)), ComputeBufferType.Structured);
             }
             
             if (enableSkyAtmosphere)
