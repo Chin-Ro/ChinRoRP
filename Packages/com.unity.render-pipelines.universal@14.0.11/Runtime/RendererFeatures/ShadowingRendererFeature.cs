@@ -18,7 +18,7 @@ namespace UnityEngine.Rendering.Universal
         
         public override void Create()
         {
-            m_ContactShadowsPass = new ContactShadowsPass(shadowingData);
+            //m_ContactShadowsPass = new ContactShadowsPass(shadowingData);
         }
 
         public override void OnCameraPreCull(ScriptableRenderer renderer, in CameraData cameraData)
@@ -31,7 +31,7 @@ namespace UnityEngine.Rendering.Universal
             bool contactShadowsEnabled = ContactShadows.IsContactShadowsEnabled();
             if (contactShadowsEnabled)
             {
-                renderer.EnqueuePass(m_ContactShadowsPass);
+                //renderer.EnqueuePass(m_ContactShadowsPass);
             }
         }
 
@@ -45,13 +45,13 @@ namespace UnityEngine.Rendering.Universal
 
             if (contactShadowsEnabled)
             {
-                m_ContactShadowsPass.Setup(shadowPassEvent, sampleCount);
+                //m_ContactShadowsPass.Setup(shadowPassEvent, sampleCount);
             }
         }
 
         protected override void Dispose(bool disposing)
         {
-            m_ContactShadowsPass.Dispose();
+            //m_ContactShadowsPass.Dispose();
         }
     }
     

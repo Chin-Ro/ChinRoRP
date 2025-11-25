@@ -39,11 +39,6 @@
         
         public void Dispose()
         {
-            if (RenderSettings.skybox == skyAtmosphereMaterial)
-            {
-                RenderSettings.skybox = null;
-            }
-
             if (skyAtmosphereMaterial)
             {
                 CoreUtils.Destroy(skyAtmosphereMaterial);
