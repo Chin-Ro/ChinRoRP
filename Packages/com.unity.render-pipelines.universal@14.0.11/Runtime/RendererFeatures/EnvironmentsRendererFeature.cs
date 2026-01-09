@@ -142,6 +142,9 @@ namespace UnityEngine.Rendering.Universal
 
             m_ShaderVariablesEnvironments = new ShaderVariablesEnvironments();
             m_OpaqueAtmosphereScatteringPass ??= new OpaqueAtmosphereScatteringPass(RenderPassEvent.AfterRenderingSkybox, environmentsData);
+            
+            m_DistantSkyLightLutBuffer.SetData(new Vector4[] { Vector4.zero });
+            Shader.SetGlobalBuffer(EnvironmentConstants.DistantSkyLightLutBufferSRV, m_DistantSkyLightLutBuffer);
         }
 
         public override void OnCameraPreCull(ScriptableRenderer renderer, in CameraData cameraData)
@@ -318,11 +321,6 @@ namespace UnityEngine.Rendering.Universal
             if (enableSkyAtmosphere)
             {
                 m_SkyAtmosphereLookUpTablesPass.Setup(ref m_DistantSkyLightLutBuffer);
-            }
-            else
-            {
-                m_DistantSkyLightLutBuffer.SetData(new Vector4[] { Vector4.zero });
-                renderingData.commandBuffer.SetGlobalBuffer(EnvironmentConstants.DistantSkyLightLutBufferSRV, m_DistantSkyLightLutBuffer);
             }
         }
 
