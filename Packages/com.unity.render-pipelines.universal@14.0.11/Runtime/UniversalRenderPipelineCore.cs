@@ -1849,7 +1849,7 @@ namespace UnityEngine.Rendering.Universal
             }
             
             // VisibleLight.finalColor already returns color in active color space
-            lightColor = lightData.finalColor;
+            lightColor = LightUtils.EvaluateLightColor(light, light.GetUniversalAdditionalLightData());
             
             // Sky atmosphere transmittance toward the sun for directional lights
             if (lightType == LightType.Directional)

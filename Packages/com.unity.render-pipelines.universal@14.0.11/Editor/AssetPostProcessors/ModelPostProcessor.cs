@@ -9,7 +9,7 @@ namespace UnityEditor.Rendering.Universal
         void OnPostprocessModel(GameObject go)
         {
             CoreEditorUtils.AddAdditionalData<Camera, UniversalAdditionalCameraData>(go);
-            CoreEditorUtils.AddAdditionalData<Light, UniversalAdditionalLightData>(go);
+            CoreEditorUtils.AddAdditionalData<Light, UniversalAdditionalLightData>(go, UniversalAdditionalLightData.InitDefaultHDAdditionalLightData);
         }
     }
 }

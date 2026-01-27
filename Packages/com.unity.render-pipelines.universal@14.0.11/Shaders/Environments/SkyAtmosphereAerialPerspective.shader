@@ -1,9 +1,5 @@
 Shader "Hidden/SkyAtmosphereAerialPerspective"
 {
-    Properties
-    {
-        [Toggle(SOURCE_DISK_ENABLED)] SourceDiskEnabled ("Source Disk Enabled", Float) = 1
-    }
     SubShader
     {
         Tags { "Queue"="Background" "RenderType"="Background" "PreviewType"="Skybox" }
@@ -20,7 +16,7 @@ Shader "Hidden/SkyAtmosphereAerialPerspective"
             #pragma vertex Vert
             #pragma fragment Frag
 
-            #pragma multi_compile _ SOURCE_DISK_ENABLED
+            // #pragma multi_compile _ SOURCE_DISK_ENABLED
             #pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
             
             // #define PER_PIXEL_NOISE 1
@@ -28,6 +24,7 @@ Shader "Hidden/SkyAtmosphereAerialPerspective"
             #define RENDERSKY_ENABLED 1
             // #define FASTSKY_ENABLED 1
             #define FASTAERIALPERSPECTIVE_ENABLED 1
+            #define SOURCE_DISK_ENABLED 0
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 	        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"

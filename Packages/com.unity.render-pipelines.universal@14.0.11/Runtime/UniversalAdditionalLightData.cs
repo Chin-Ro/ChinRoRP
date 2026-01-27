@@ -1,4 +1,5 @@
 using System;
+using UnityEditor;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -50,6 +51,19 @@ namespace UnityEngine.Rendering.Universal
             return lightData;
         }
     }
+    
+    // This structure contains all the old values for every recordable fields from the HD light editor
+    // so we can force timeline to record changes on other fields from the LateUpdate function (editor only)
+    struct TimelineWorkaround
+    {
+        public float oldSpotAngle;
+        public Color oldLightColor;
+        public Vector3 oldLossyScale;
+        public bool oldDisplayAreaLightEmissiveMesh;
+        public float oldLightColorTemperature;
+        public float oldIntensity;
+        public bool lightEnabled;
+    }
 
     /// <summary>
     /// Class containing various additional light data used by URP.
@@ -57,7 +71,9 @@ namespace UnityEngine.Rendering.Universal
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Light))]
     [URPHelpURL("universal-additional-light-data")]
-    public class UniversalAdditionalLightData : MonoBehaviour, ISerializationCallbackReceiver, IAdditionalData
+    [ExecuteAlways]
+    [AddComponentMenu("")] // Hide in menu
+    public partial class UniversalAdditionalLightData : MonoBehaviour, ISerializationCallbackReceiver, IAdditionalData
     {
         // Version 0 means serialized data before the version field.
         [SerializeField] int m_Version = 3;
@@ -107,6 +123,15 @@ namespace UnityEngine.Rendering.Universal
         /// The default custom shadow resolution for additional lights.
         /// </summary>
         public static readonly int AdditionalLightsShadowDefaultCustomResolution = 128;
+        
+        /// <summary>
+        /// The default intensity value for directional lights in Lux
+        /// </summary>
+        public const float k_DefaultDirectionalLightIntensity = Mathf.PI; // In lux
+        /// <summary>
+        /// The default intensity value for punctual lights in Lumen
+        /// </summary>
+        public const float k_DefaultPunctualLightIntensity = 600.0f;      // Light default to 600 lumen, i.e ~48 candela
 
         [NonSerialized] private Light m_Light;
 
@@ -124,6 +149,76 @@ namespace UnityEngine.Rendering.Universal
                 if (!m_Light)
                     TryGetComponent(out m_Light);
                 return m_Light;
+            }
+        }
+
+        [SerializeField] float m_Intensity;
+        
+        /// <summary>
+        /// Get/Set the intensity of the light using the current light unit.
+        /// </summary>
+        public float intensity
+        {
+            get => m_Intensity;
+            set
+            {
+                if (m_Intensity == value)
+                    return;
+
+                m_Intensity = Mathf.Clamp(value, 0.0f, float.MaxValue);
+                UpdateLightIntensity();
+            }
+        }
+        
+        internal bool useColorTemperature
+        {
+            get => light.useColorTemperature;
+            set
+            {
+                if (light.useColorTemperature == value)
+                    return;
+
+                light.useColorTemperature = value;
+            }
+        }
+
+        
+        [SerializeField] float m_LuxAtDistance = 1.0f;
+        /// <summary>
+        /// Set/Get the distance for spot lights where the emission intensity is matches the value set in the intensity property.
+        /// </summary>
+        public float luxAtDistance
+        {
+            get => m_LuxAtDistance;
+            set
+            {
+                if (m_LuxAtDistance == value)
+                    return;
+
+                m_LuxAtDistance = Mathf.Clamp(value, 0.0f, float.MaxValue);
+                UpdateLightIntensity();
+            }
+        }
+
+        // Only for pyramid projector
+        [SerializeField] float m_AspectRatio = 1.0f;
+
+        // Only for Spotlight, should be hide for other light
+        [SerializeField] bool m_EnableSpotReflector = true;
+
+        /// <summary>
+        /// Get/Set the Spot Reflection option on spot lights.
+        /// </summary>
+        public bool enableSpotReflector
+        {
+            get => m_EnableSpotReflector;
+            set
+            {
+                if (m_EnableSpotReflector == value)
+                    return;
+
+                m_EnableSpotReflector = value;
+                UpdateLightIntensity();
             }
         }
 
@@ -308,6 +403,153 @@ namespace UnityEngine.Rendering.Universal
 
         public bool useContactShadow => m_UseContactShadow;
         
+        [SerializeField, Range(0.0f, 1.0f)] LightUnit m_LightUnit = LightUnit.Lumen;
+        /// <summary>
+        /// Get/Set the light unit. When changing the light unit, the intensity will be converted to match the previous intensity in the new unit.
+        /// </summary>
+        public LightUnit lightUnit
+        {
+            get => m_LightUnit;
+            set
+            {
+                if (m_LightUnit == value)
+                    return;
+
+                if (!IsValidLightUnitForType(type, value))
+                {
+                    var supportedTypes = String.Join(", ", GetSupportedLightUnits(type));
+                    Debug.LogError($"Set Light Unit '{value}' to a {GetLightTypeName()} is not allowed, only {supportedTypes} are supported.");
+                    return;
+                }
+
+                LightUtils.ConvertLightIntensity(m_LightUnit, value, this, light);
+
+                m_LightUnit = value;
+                UpdateLightIntensity();
+            }
+        }
+        
+        [NonSerialized]
+        TimelineWorkaround timelineWorkaround = new TimelineWorkaround();
+        /// <summary>
+        /// Synchronize all the HD Additional Light values with the Light component.
+        /// </summary>
+        public void UpdateAllLightValues()
+        {
+            // Update light intensity
+            UpdateLightIntensity();
+        }
+
+        void UpdateLightIntensity()
+        {
+            if (lightUnit == LightUnit.Lumen)
+            {
+                SetLightIntensityPunctual(intensity);
+            }
+            else if (lightUnit == LightUnit.Ev100)
+            {
+                light.intensity = LightUtils.ConvertEvToLuminance(m_Intensity);
+            }
+            else
+            {
+                UniversalLightType lightType = type;
+                if ((lightType == UniversalLightType.Spot || lightType == UniversalLightType.Point) && lightUnit == LightUnit.Lux)
+                {
+                    light.intensity = LightUtils.ConvertLuxToCandela(m_Intensity, luxAtDistance);
+                }
+                else
+                {
+                    light.intensity = m_Intensity;
+                }
+            }
+#if UNITY_EDITOR
+            light.SetLightDirty(); // Should be apply only to parameter that's affect GI, but make the code cleaner
+#endif
+        }
+
+        void SetLightIntensityPunctual(float intensity)
+        {
+            switch (type)
+            {
+                case UniversalLightType.Directional:
+                    light.intensity = intensity;
+                    break;
+                case UniversalLightType.Point:
+                    if (lightUnit == LightUnit.Candela)
+                        light.intensity = intensity;
+                    else
+                        light.intensity = LightUtils.ConvertPointLightLumenToCandela(intensity);
+                    break;
+                case UniversalLightType.Spot:
+                    if (lightUnit == LightUnit.Candela)
+                    {
+                        light.intensity = intensity;
+                    }
+                    else // lumen
+                    {
+                        if (enableSpotReflector)
+                        {
+                            light.intensity = LightUtils.ConvertSpotLightLumenToCandela(intensity, light.spotAngle * Mathf.Deg2Rad, true);
+                        }
+                        else
+                        {
+                            // No reflector, angle act as occlusion of point light.
+                            light.intensity = LightUtils.ConvertPointLightLumenToCandela(intensity);
+                        }
+                    }
+
+                    break;
+            }
+        }
+
+        public static void InitDefaultHDAdditionalLightData(UniversalAdditionalLightData lightData)
+        {
+            // Special treatment for Unity built-in area light. Change it to our rectangle light
+            var light = lightData.gameObject.GetComponent<Light>();
+            
+            // Set light intensity and unit using its type
+            //note: requiring type convert Rectangle and Disc to Area and correctly set areaLight
+            switch (lightData.type)
+            {
+                case UniversalLightType.Directional:
+                    lightData.lightUnit = LightUnit.Lux;
+                    lightData.intensity = k_DefaultDirectionalLightIntensity / Mathf.PI * 100000.0f; // Change back to just k_DefaultDirectionalLightIntensity on 11.0.0 (can't change constant as it's a breaking change)
+                    break;
+                case UniversalLightType.Point:
+                case UniversalLightType.Spot:
+                    lightData.lightUnit = LightUnit.Lumen;
+                    lightData.intensity = k_DefaultPunctualLightIntensity;
+                    break;
+            }
+
+            // We don't use the global settings of shadow mask by default
+            light.lightShadowCasterMode = LightShadowCasterMode.Everything;
+            
+            // Enable filter/temperature mode by default for all light types
+            lightData.useColorTemperature = true;
+        }
+
+        void LateUpdate()
+        {
+            // Check if the intensity have been changed by the inspector or an animator
+            if (timelineWorkaround.oldLossyScale != transform.lossyScale
+                || intensity != timelineWorkaround.oldIntensity
+                || light.colorTemperature != timelineWorkaround.oldLightColorTemperature)
+            {
+                UpdateLightIntensity();
+                timelineWorkaround.oldLossyScale = transform.lossyScale;
+                timelineWorkaround.oldIntensity = intensity;
+                timelineWorkaround.oldLightColorTemperature = light.colorTemperature;
+            }
+            
+            // Same check for light angle to update intensity using spot angle
+            if (type == UniversalLightType.Spot && (timelineWorkaround.oldSpotAngle != light.spotAngle))
+            {
+                UpdateLightIntensity();
+                timelineWorkaround.oldSpotAngle = light.spotAngle;
+            }
+        }
+
         /// <inheritdoc/>
         public void OnBeforeSerialize()
         {

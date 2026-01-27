@@ -26,8 +26,19 @@ namespace UnityEditor.Rendering.Universal
             Shadows = 1 << 5,
             LightCookie = 1 << 6
         }
+        
+        enum AdditionalProperties
+        {
+            General = 1 << 0,
+            Shape = 1 << 1,
+            Emission = 1 << 2,
+            Shadow = 1 << 3,
+        }
 
         static readonly ExpandedState<Expandable, Light> k_ExpandedState = new(~-1, "URP");
+        static readonly AdditionalPropertiesState<AdditionalProperties, Light> k_AdditionalPropertiesState = new AdditionalPropertiesState<AdditionalProperties, Light>(0, "URP");
+        
+        private static readonly UniversalRenderPipelineLightUnitSliderUIDrawer k_LightUnitSliderUIDrawer = new UniversalRenderPipelineLightUnitSliderUIDrawer();
 
         public static readonly CED.IDrawer Inspector = CED.Group(
             CED.Conditional(
@@ -44,10 +55,8 @@ namespace UnityEditor.Rendering.Universal
                     return !sceneLighting;
                 },
                 (_, __) => EditorGUILayout.HelpBox(Styles.DisabledLightWarning.text, MessageType.Warning)),
-            CED.FoldoutGroup(LightUI.Styles.generalHeader,
-                Expandable.General,
-                k_ExpandedState,
-                DrawGeneralContent),
+            CED.AdditionalPropertiesFoldoutGroup(LightUI.Styles.generalHeader, Expandable.General, k_ExpandedState, AdditionalProperties.General, k_AdditionalPropertiesState, 
+                DrawGeneralContent, DrawGeneralAdditionalContent),
             CED.Conditional(
                 (serializedLight, editor) => !serializedLight.settings.lightType.hasMultipleDifferentValues && serializedLight.settings.light.type == LightType.Spot,
                 CED.FoldoutGroup(LightUI.Styles.shapeHeader, Expandable.Shape, k_ExpandedState, DrawSpotShapeContent)),
@@ -60,12 +69,13 @@ namespace UnityEditor.Rendering.Universal
                     return lightType == LightType.Rectangle || lightType == LightType.Disc;
                 },
                 CED.FoldoutGroup(LightUI.Styles.shapeHeader, Expandable.Shape, k_ExpandedState, DrawAreaShapeContent)),
-            CED.FoldoutGroup(LightUI.Styles.emissionHeader,
+            CED.AdditionalPropertiesFoldoutGroup(LightUI.Styles.emissionHeader,
                 Expandable.Emission,
-                k_ExpandedState,
+                k_ExpandedState, AdditionalProperties.Emission, k_AdditionalPropertiesState,
                 CED.Group(
                     LightUI.DrawColor,
-                    DrawEmissionContent)),
+                    DrawLightIntensityGUILayout,
+                    DrawEmissionContent), DrawEmissionAdditionalContent),
             CED.FoldoutGroup(LightUI.Styles.renderingHeader,
                 Expandable.Rendering,
                 k_ExpandedState,
@@ -79,7 +89,7 @@ namespace UnityEditor.Rendering.Universal
                 k_ExpandedState,
                 DrawShadowsContent)
         );
-
+        
         static Func<int> s_SetGizmosDirty = SetGizmosDirty();
         static Func<int> SetGizmosDirty()
         {
@@ -117,6 +127,25 @@ namespace UnityEditor.Rendering.Universal
             return lambda.Compile();
         }
 
+        internal static void RegisterEditor(UniversalRenderPipelineLightEditor editor)
+        {
+            k_AdditionalPropertiesState.RegisterEditor(editor);
+        }
+        
+        internal static void UnregisterEditor(UniversalRenderPipelineLightEditor editor)
+        {
+            k_AdditionalPropertiesState.UnregisterEditor(editor);
+        }
+
+        [SetAdditionalPropertiesVisibility]
+        internal static void SetAdditionalPropertiesVisibility(bool value)
+        {
+            if (value)
+                k_AdditionalPropertiesState.ShowAll();
+            else
+                k_AdditionalPropertiesState.HideAll();
+        }
+
         static void DrawGeneralContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)
         {
             DrawGeneralContentInternal(serializedLight, owner, isInPreset: false);
@@ -126,53 +155,101 @@ namespace UnityEditor.Rendering.Universal
         {
             DrawGeneralContentInternal(serializedLight, owner, isInPreset: true);
         }
+        
+        // !!! This is very weird, but for some reason the change of this field is not registered when changed.
+        //     Because it is important to trigger the rebuild of the light entity (for the burst light loop) and it
+        //     happens only when a change in editor happens !!!
+        //     The issue is likely on the C# trunk side with the GUI Dropdown.
+        static int s_OldLightBakeType = (int)LightmapBakeType.Realtime;
 
         static void DrawGeneralContentInternal(UniversalRenderPipelineSerializedLight serializedLight, Editor owner, bool isInPreset)
         {
-            // To the user, we will only display it as a area light, but under the hood, we have Rectangle and Disc. This is not to confuse people
-            // who still use our legacy light inspector.
-
-            int selectedLightType = serializedLight.settings.lightType.intValue;
-
-            // Handle all lights that are not in the default set
-            if (!Styles.LightTypeValues.Contains(serializedLight.settings.lightType.intValue))
-            {
-                if (serializedLight.settings.lightType.intValue == (int)LightType.Disc)
-                {
-                    selectedLightType = (int)LightType.Rectangle;
-                }
-            }
-
-            var rect = EditorGUILayout.GetControlRect();
-            EditorGUI.BeginProperty(rect, Styles.Type, serializedLight.settings.lightType);
             EditorGUI.BeginChangeCheck();
-            int type = EditorGUI.IntPopup(rect, Styles.Type, selectedLightType, Styles.LightTypeTitles, Styles.LightTypeValues);
+            Rect lineRect = EditorGUILayout.GetControlRect();
+            UniversalLightType lightType = serializedLight.type;
+            UniversalLightType updatedLightType;
+            
+            //Partial support for prefab. There is no way to fully support it at the moment.
+            //Missing support on the Apply and Revert contextual menu on Label for Prefab overrides. They need to be done two times.
+            //(This will continue unless we remove AdditionalDatas)
+            using (new LightTypeEditionScope(lineRect, Styles.Type, serializedLight, isInPreset))
+            {
+                EditorGUI.showMixedValue = lightType == (UniversalLightType)(-1);
+                updatedLightType = (UniversalLightType)EditorGUI.EnumPopup(
+                    lineRect,
+                    Styles.Type,
+                    lightType,
+                    e => !isInPreset,
+                    false);
+            }
 
             if (EditorGUI.EndChangeCheck())
             {
-                s_SetGizmosDirty();
-                serializedLight.settings.lightType.intValue = type;
+                serializedLight.type = updatedLightType; //also register undo
+                
+                UpdateLightIntensityUnit(serializedLight, owner);
+                
+                serializedLight.Update();
+                
+                SetLightsDirty(owner); // Should be apply only to parameter that's affect GI, but make the code cleaner
             }
-            EditorGUI.EndProperty();
+            EditorGUI.showMixedValue = false;
+            
+            if (s_OldLightBakeType != serializedLight.settings.lightmapping.intValue)
+            {
+                s_OldLightBakeType = serializedLight.settings.lightmapping.intValue;
+                GUI.changed = true;
+            }
 
+            // // To the user, we will only display it as a area light, but under the hood, we have Rectangle and Disc. This is not to confuse people
+            // // who still use our legacy light inspector.
+            //
+            // int selectedLightType = serializedLight.settings.lightType.intValue;
+            //
+            // // Handle all lights that are not in the default set
+            // if (!Styles.LightTypeValues.Contains(serializedLight.settings.lightType.intValue))
+            // {
+            //     if (serializedLight.settings.lightType.intValue == (int)LightType.Disc)
+            //     {
+            //         selectedLightType = (int)LightType.Rectangle;
+            //     }
+            // }
+            //
+            // var rect = EditorGUILayout.GetControlRect();
+            // EditorGUI.BeginProperty(rect, Styles.Type, serializedLight.settings.lightType);
+            // EditorGUI.BeginChangeCheck();
+            // int type = EditorGUI.IntPopup(rect, Styles.Type, selectedLightType, Styles.LightTypeTitles, Styles.LightTypeValues);
+            //
+            // if (EditorGUI.EndChangeCheck())
+            // {
+            //     s_SetGizmosDirty();
+            //     serializedLight.settings.lightType.intValue = type;
+            // }
+            // EditorGUI.EndProperty();
+            //
             Light light = serializedLight.settings.light;
-            var lightType = light.type;
-            if (LightType.Directional != lightType && light == RenderSettings.sun)
+            // var lightType = light.type;
+            if (UniversalLightType.Directional != lightType && light == RenderSettings.sun)
             {
                 EditorGUILayout.HelpBox(Styles.SunSourceWarning.text, MessageType.Warning);
             }
-
+            
             if (!serializedLight.settings.lightType.hasMultipleDifferentValues)
             {
                 using (new EditorGUI.DisabledScope(serializedLight.settings.isAreaLightType))
                     serializedLight.settings.DrawLightmapping();
-
+            
                 if (serializedLight.settings.isAreaLightType && serializedLight.settings.lightmapping.intValue != (int)LightmapBakeType.Baked)
                 {
                     serializedLight.settings.lightmapping.intValue = (int)LightmapBakeType.Baked;
                     serializedLight.Apply();
                 }
             }
+        }
+
+        static void DrawGeneralAdditionalContent(UniversalRenderPipelineSerializedLight serialized, Editor owner)
+        {
+            
         }
 
         internal static void SyncLightAndShadowLayers(UniversalRenderPipelineSerializedLight serializedLight, SerializedProperty serialized)
@@ -225,25 +302,128 @@ namespace UnityEditor.Rendering.Universal
                 serializedLight.settings.DrawArea();
         }
 
-        static void DrawEmissionContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)
+        static void DrawLightIntensityGUILayout(UniversalRenderPipelineSerializedLight serialized, Editor owner)
         {
-            serializedLight.settings.DrawIntensity();
-            serializedLight.settings.DrawBounceIntensity();
+            // Match const defined in EditorGUI.cs
+            const int k_IndentPerLevel = 15;
 
-            if (!serializedLight.settings.lightType.hasMultipleDifferentValues)
+            const int k_ValueUnitSeparator = 2;
+            const int k_UnitWidth = 100;
+            
+            float indent = k_IndentPerLevel * EditorGUI.indentLevel;
+
+            Rect lineRect = EditorGUILayout.GetControlRect();
+            Rect labelRect = lineRect;
+            labelRect.width = EditorGUIUtility.labelWidth;
+
+            // Expand to reach both lines of the intensity field.
+            var interlineOffset = EditorGUIUtility.singleLineHeight + 2f;
+            labelRect.height += interlineOffset;
+
+            //handling of prefab overrides in a parent label
+            GUIContent parentLabel = Styles.lightIntensity;
+            parentLabel = EditorGUI.BeginProperty(labelRect, parentLabel, serialized.lightUnit);
+            parentLabel = EditorGUI.BeginProperty(labelRect, parentLabel, serialized.intensity);
             {
-                var lightType = serializedLight.settings.light.type;
-                if (lightType != LightType.Directional)
+                // Restore the original rect for actually drawing the label.
+                labelRect.height -= interlineOffset;
+
+                EditorGUI.LabelField(labelRect, parentLabel);
+            }
+            EditorGUI.EndProperty();
+            EditorGUI.EndProperty();
+            
+            // Draw the light unit slider + icon + tooltip
+            Rect lightUnitSliderRect = lineRect; // TODO: Move the value and unit rects to new line
+            lightUnitSliderRect.x += EditorGUIUtility.labelWidth + k_ValueUnitSeparator;
+            lightUnitSliderRect.width -= EditorGUIUtility.labelWidth + k_ValueUnitSeparator;
+
+            var lightType = serialized.type;
+            var lightUnit = serialized.lightUnit.GetEnumValue<LightUnit>();
+            k_LightUnitSliderUIDrawer.SetSerializedObject(serialized.serializedObject);
+            k_LightUnitSliderUIDrawer.Draw(lightType, lightUnit, serialized.intensity, lightUnitSliderRect, serialized, owner);
+
+            // We use PropertyField to draw the value to keep the handle at left of the field
+            // This will apply the indent again thus we need to remove it time for alignment
+            Rect valueRect = EditorGUILayout.GetControlRect();
+            labelRect.width = EditorGUIUtility.labelWidth;
+            valueRect.width += indent - k_ValueUnitSeparator - k_UnitWidth;
+            Rect unitRect = valueRect;
+            unitRect.x += valueRect.width - indent + k_ValueUnitSeparator;
+            unitRect.width = k_UnitWidth + .5f;
+
+            // Draw the unit textfield
+            EditorGUI.BeginChangeCheck();
+            EditorGUI.PropertyField(valueRect, serialized.intensity, CoreEditorStyles.empty);
+            DrawLightIntensityUnitPopup(unitRect, serialized, owner);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                serialized.intensity.floatValue = Mathf.Max(serialized.intensity.floatValue, 0.0f);
+            }
+        }
+
+        static void DrawEmissionContent(UniversalRenderPipelineSerializedLight serialized, Editor owner)
+        {
+            UniversalLightType lightType = serialized.type;
+            LightUnit lightUnit = serialized.lightUnit.GetEnumValue<LightUnit>();
+            
+            if (lightType != UniversalLightType.Directional && lightUnit == (LightUnit)PunctualLightUnit.Lux)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(serialized.luxAtDistance, Styles.luxAtDistance);
+                if (EditorGUI.EndChangeCheck())
                 {
-#if UNITY_2020_1_OR_NEWER
-                    serializedLight.settings.DrawRange();
-#else
-                    serializedLight.settings.DrawRange(false);
-#endif
+                    serialized.luxAtDistance.floatValue = Mathf.Max(serialized.luxAtDistance.floatValue, 0.01f);
                 }
+                EditorGUI.indentLevel--;
             }
 
-            DrawLightCookieContent(serializedLight, owner);
+            if (lightType == UniversalLightType.Spot && (lightUnit == (int)PunctualLightUnit.Lumen && k_AdditionalPropertiesState[AdditionalProperties.Emission]))
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(serialized.enableSpotReflector, Styles.enableSpotReflector);
+                EditorGUI.indentLevel--;
+            }
+
+            if (lightType != UniversalLightType.Directional)
+            {
+#if UNITY_2020_1_OR_NEWER
+                serialized.settings.DrawRange();
+#else
+                serialized.settings.DrawRange(false);
+#endif
+                // Make sure the range is not 0.0
+                serialized.settings.range.floatValue = Mathf.Max(0.001f, serialized.settings.range.floatValue);
+            }
+
+            serialized.settings.DrawBounceIntensity();
+            
+            DrawLightCookieContent(serialized, owner);
+            
+//             serializedLight.settings.DrawIntensity();
+//             serializedLight.settings.DrawBounceIntensity();
+//
+//             if (!serializedLight.settings.lightType.hasMultipleDifferentValues)
+//             {
+//                 var lightType = serializedLight.settings.light.type;
+//                 if (lightType != LightType.Directional)
+//                 {
+// #if UNITY_2020_1_OR_NEWER
+//                     serializedLight.settings.DrawRange();
+// #else
+//                     serializedLight.settings.DrawRange(false);
+// #endif
+//                 }
+//             }
+//
+//             DrawLightCookieContent(serializedLight, owner);
+        }
+
+        static void DrawEmissionAdditionalContent(UniversalRenderPipelineSerializedLight serialized, Editor owner)
+        {
+            
         }
 
         static void DrawRenderingContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)
@@ -407,7 +587,7 @@ namespace UnityEditor.Rendering.Universal
         static void DrawAdditionalShadowData(UniversalRenderPipelineSerializedLight serializedLight, Editor editor)
         {
             // 0: Custom bias - 1: Bias values defined in Pipeline settings
-            int selectedUseAdditionalData = serializedLight.additionalLightData.usePipelineSettings ? 1 : 0;
+            int selectedUseAdditionalData = ((UniversalAdditionalLightData)serializedLight.serializedObject.targetObject).usePipelineSettings ? 1 : 0;
             Rect r = EditorGUILayout.GetControlRect(true);
             EditorGUI.BeginProperty(r, Styles.shadowBias, serializedLight.useAdditionalDataProp);
             {
@@ -447,7 +627,7 @@ namespace UnityEditor.Rendering.Universal
 
         static void DrawShadowsResolutionGUI(UniversalRenderPipelineSerializedLight serializedLight)
         {
-            int shadowResolutionTier = serializedLight.additionalLightData.additionalLightsShadowResolutionTier;
+            int shadowResolutionTier = ((UniversalAdditionalLightData)serializedLight.serializedObject.targetObject).additionalLightsShadowResolutionTier;
 
             using (new EditorGUILayout.HorizontalScope())
             {

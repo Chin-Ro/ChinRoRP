@@ -325,7 +325,7 @@ int VirtualShadowMapId0;
 int VirtualShadowMapId1;
 
 
-#if SOURCE_DISK_ENABLED
+// #if SOURCE_DISK_ENABLED
 
 uint SourceDiskEnabled; 
 
@@ -352,7 +352,7 @@ float3 GetLightDiskLuminance(float3 PlanetCenterToCamera, float3 WorldDir, uint 
 	}
 	return 0.0f;
 }
-#endif
+// #endif
 
 
 float3 GetMultipleScattering(float3 WorlPos, float ViewZenithCosAngle)

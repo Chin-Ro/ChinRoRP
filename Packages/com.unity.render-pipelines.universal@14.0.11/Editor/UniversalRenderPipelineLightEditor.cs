@@ -1,4 +1,6 @@
 using System;
+using System.Linq.Expressions;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -11,10 +13,48 @@ namespace UnityEditor.Rendering.Universal
     {
         UniversalRenderPipelineSerializedLight serializedLight { get; set; }
 
+        private UniversalAdditionalLightData[] m_AdditionalLightDatas;
+        private UniversalAdditionalLightData targetAdditionalData => m_AdditionalLightDatas[ReferenceTargetIndex(this)];
+        
+        static Func<Editor, int> ReferenceTargetIndex;
+
+        static UniversalRenderPipelineLightEditor()
+        {
+            var type = typeof(UnityEditor.Editor);
+            var propertyInfo = type.GetProperty("referenceTargetIndex", BindingFlags.NonPublic | BindingFlags.Instance);
+            var getterMethodInfo = propertyInfo.GetGetMethod(true);
+            var instance = Expression.Parameter(typeof(Editor), "instance");
+            var getterCall = Expression.Call(instance, getterMethodInfo);
+            var lambda = Expression.Lambda<Func<Editor, int>>(getterCall, instance);
+            ReferenceTargetIndex = lambda.Compile();
+        }
+
         protected override void OnEnable()
         {
-            serializedLight = new UniversalRenderPipelineSerializedLight(serializedObject, settings);
+            base.OnEnable();
+            // Get & automatically add additional HD data if not present
+            m_AdditionalLightDatas = CoreEditorUtils.GetAdditionalData<UniversalAdditionalLightData>(targets, UniversalAdditionalLightData.InitDefaultHDAdditionalLightData);
+            serializedLight = new UniversalRenderPipelineSerializedLight(m_AdditionalLightDatas, settings);
             Undo.undoRedoPerformed += ReconstructReferenceToAdditionalDataSO;
+            
+            // Update emissive mesh and light intensity when undo/redo
+            Undo.undoRedoPerformed += OnUndoRedo;
+            
+            UniversalRenderPipelineLightUI.RegisterEditor(this);
+        }
+
+        void OnUndoRedo()
+        {
+            // Serialized object is lossing references after an undo
+            if (serializedLight.serializedObject.targetObject != null)
+            {
+                serializedLight.serializedObject.Update();
+                settings.Update();
+                serializedLight.lightGameObject.Update();
+                
+                serializedObject.ApplyModifiedProperties();
+                settings.ApplyModifiedProperties();
+            }
         }
 
         internal void ReconstructReferenceToAdditionalDataSO()
@@ -26,6 +66,9 @@ namespace UnityEditor.Rendering.Universal
         protected void OnDisable()
         {
             Undo.undoRedoPerformed -= ReconstructReferenceToAdditionalDataSO;
+            // Update emissive mesh and light intensity when undo/redo
+            Undo.undoRedoPerformed -= OnUndoRedo;
+            UniversalRenderPipelineLightUI.UnregisterEditor(this);
         }
 
         // IsPreset is an internal API - lets reuse the usable part of this function
@@ -38,6 +81,12 @@ namespace UnityEditor.Rendering.Universal
         public override void OnInspectorGUI()
         {
             serializedLight.Update();
+            // Add space before the first collapsible area
+            EditorGUILayout.Space();
+            
+            ApplyAdditionalComponentsVisibility(true);
+            
+            EditorGUI.BeginChangeCheck();
 
             if (IsPresetEditor(this))
             {
@@ -48,7 +97,25 @@ namespace UnityEditor.Rendering.Universal
                 UniversalRenderPipelineLightUI.Inspector.Draw(serializedLight, this);
             }
 
-            serializedLight.Apply();
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedLight.Apply();
+
+                foreach (var universalLightData in m_AdditionalLightDatas)
+                {
+                    universalLightData.UpdateAllLightValues();
+                }
+            }
+        }
+        
+        // Internal utilities
+        void ApplyAdditionalComponentsVisibility(bool hide)
+        {
+            // UX team decided that we should always show component in inspector.
+            // However already authored scene save this settings, so force the component to be visible
+            foreach (var t in serializedLight.serializedObject.targetObjects)
+                if (((UniversalAdditionalLightData)t).hideFlags == HideFlags.HideInInspector)
+                    ((UniversalAdditionalLightData)t).hideFlags = HideFlags.None;
         }
 
         protected override void OnSceneGUI()

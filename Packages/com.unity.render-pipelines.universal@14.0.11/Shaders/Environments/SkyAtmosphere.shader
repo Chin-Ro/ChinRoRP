@@ -1,9 +1,5 @@
 ﻿Shader "Hidden/Environments/SkyAtmosphere"
 {
-    Properties
-    {
-        [Toggle(SOURCE_DISK_ENABLED)] SourceDiskEnabled ("Source Disk Enabled", Float) = 1
-    }
     SubShader
     {
         Tags { "Queue"="Background" "RenderType"="Background" "PreviewType"="Skybox" }
@@ -18,7 +14,7 @@
             #pragma vertex Vert
             #pragma fragment Frag
 
-            #pragma multi_compile _ SOURCE_DISK_ENABLED
+            #pragma multi_compile _SUNDISK_NONE SOURCE_DISK_ENABLED
             #pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
             
             // #define PER_PIXEL_NOISE 1
@@ -117,8 +113,7 @@
 				{
 					// Get the light disk luminance to draw 
 					LuminanceScale = SkyLuminanceFactor;
-				#if SOURCE_DISK_ENABLED
-					if (SourceDiskEnabled > 0)
+				#if !defined(_SUNDISK_NONE)
 					{
 						PreExposedL += GetLightDiskLuminance(WorldPos, WorldDir, 0);
 					#if SECOND_ATMOSPHERE_LIGHT_ENABLED

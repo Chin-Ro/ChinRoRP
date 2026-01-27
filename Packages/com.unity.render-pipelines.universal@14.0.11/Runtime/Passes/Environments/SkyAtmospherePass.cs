@@ -27,6 +27,8 @@
                 cmd.SetGlobalFloat(EnvironmentConstants.AerialPerspectiveStartDepthKm, AerialPerspectiveStartDepthInM * SkyAtmosphereUtils.M_TO_KM);
                 skyAtmosphereMaterial.SetFloat("DepthReadDisabled", 0.0f);
                 CoreUtils.SetKeyword(skyAtmosphereMaterial, "SECOND_ATMOSPHERE_LIGHT_ENABLED", bSecondAtmosphereLightEnabled);
+                CoreUtils.SetKeyword(skyAtmosphereMaterial, "SOURCE_DISK_ENABLED", renderingData.cameraData.cameraType != CameraType.Reflection);
+
                 if (RenderSettings.skybox != skyAtmosphereMaterial)
                 {
                     RenderSettings.skybox = skyAtmosphereMaterial;
