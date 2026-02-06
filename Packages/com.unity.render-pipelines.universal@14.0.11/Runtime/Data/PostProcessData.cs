@@ -142,6 +142,15 @@ namespace UnityEngine.Rendering.Universal
             /// </summary>
             [Reload("Shaders/PostProcessing/FinalPost.shader")]
             public Shader finalPostPassPS;
+            
+            [Reload("Shaders/PostProcessing/Exposure.compute")]
+            public ComputeShader exposureCS;
+            
+            [Reload("Shaders/PostProcessing/HistogramExposure.compute")]
+            public ComputeShader histogramExposureCS;
+            
+            [Reload("Shaders/PostProcessing/ApplyExposure.compute")]
+            public ComputeShader applyExposureCS;
         }
 
         /// <summary>

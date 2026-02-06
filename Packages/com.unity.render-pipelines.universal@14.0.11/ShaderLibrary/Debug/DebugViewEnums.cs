@@ -266,4 +266,22 @@ namespace UnityEngine.Rendering.Universal
         AmbientOcclusion = 0x20,
     }
     #endregion
+    
+    /// <summary>
+    /// Exposure debug mode.
+    /// </summary>
+    [GenerateHLSL]
+    public enum ExposureDebugMode
+    {
+        /// <summary>No exposure debug.</summary>
+        None,
+        /// <summary>Display the EV100 values of the scene, color-coded.</summary>
+        SceneEV100Values,
+        /// <summary>Display the Histogram used for exposure.</summary>
+        HistogramView,
+        /// <summary>Display an RGB histogram of the final image (after post-processing).</summary>
+        FinalImageHistogramView,
+        /// <summary>Visualize the scene color weighted as the metering mode selected.</summary>
+        MeteringWeighted,
+    }
 }

@@ -204,6 +204,8 @@ namespace UnityEngine.Rendering.Universal
         static List<Camera> s_Cleanup = new List<Camera>();
 
         internal bool isFirstFrame = true;
+        internal bool resetPostProcessingHistory = true;
+        internal bool didResetPostProcessingHistoryInLastFrame = false;
         
         internal VBufferParameters[] vBufferParams;
         
@@ -262,6 +264,7 @@ namespace UnityEngine.Rendering.Universal
             isFirstFrame = true;
             volumetricValidFrames = 0;
             volumetricHistoryIsValid = false;
+            resetPostProcessingHistory = true;
         }
 
         void Dispose()
@@ -834,6 +837,29 @@ namespace UnityEngine.Rendering.Universal
         internal int volumetricValidFrames = 0;
         
         internal bool volumetricHistoryIsValid = false;
+        
+        internal struct ExposureTextures
+        {
+            public bool useCurrentCamera;
+            public RTHandle parent;
+            public RTHandle current;
+            public RTHandle previous;
+
+            public bool useFetchedExposure;
+            public float fetchedGpuExposure;
+
+            public void clear()
+            {
+                parent = null;
+                current = null;
+                previous = null;
+                useFetchedExposure = false;
+                fetchedGpuExposure = 1.0f;
+            }
+        }
+        
+        private ExposureTextures m_ExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
+        internal ExposureTextures currentExposureTextures { get { return m_ExposureTextures; } }
     }
 
     /// <summary>
@@ -1909,7 +1935,9 @@ namespace UnityEngine.Rendering.Universal
         SSAO,
 
         // PostProcessPass
+        FixedExposure,
         StopNaNs,
+        DynamicExposure,
         SMAA,
         GaussianDepthOfField,
         BokehDepthOfField,

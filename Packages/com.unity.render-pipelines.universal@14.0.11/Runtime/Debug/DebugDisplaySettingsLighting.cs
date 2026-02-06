@@ -23,6 +23,9 @@ namespace UnityEngine.Rendering.Universal
 		/// Current HDR debug mode.
 		/// </summary>
         public HDRDebugMode hdrDebugMode { get; set; }
+        
+        /// <summary>Exposure debug mode.</summary>
+        public ExposureDebugMode exposureDebugMode = ExposureDebugMode.None;
 
         static internal class Strings
         {
