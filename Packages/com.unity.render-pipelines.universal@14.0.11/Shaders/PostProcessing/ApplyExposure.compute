@@ -1,23 +1,26 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
-#include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
 #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
 
 #pragma kernel KMain
-#pragma multi_compile _ ENABLE_ALPHA
 
-#include "Packages/com.unity.render-pipelines.high-definition/Runtime/PostProcessing/Shaders/PostProcessDefines.hlsl"
+#if !defined(ENABLE_ALPHA)
+    #define CTYPE float3
+    #define CTYPE_SWIZZLE xyz
+#else
+    #define CTYPE float4
+    #define CTYPE_SWIZZLE xyzw
+#endif //ENABLE_ALPHA
 
 TEXTURE2D_X(_InputTexture);
-RW_TEXTURE2D_X(CTYPE, _OutputTexture);
+RW_TEXTURE2D(CTYPE, _OutputTexture);
 
 [numthreads(8,8,1)]
 void KMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    UNITY_XR_ASSIGN_VIEW_INDEX(dispatchThreadId.z);
-
     float exposure = GetCurrentExposureMultiplier();
     CTYPE color = LOAD_TEXTURE2D_X(_InputTexture, dispatchThreadId.xy).CTYPE_SWIZZLE;
 	color.xyz *= exposure;
-    _OutputTexture[COORD_TEXTURE2D_X(dispatchThreadId.xy)] = color;
+    _OutputTexture[dispatchThreadId.xy] = color;
 }

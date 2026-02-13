@@ -546,4 +546,39 @@ uint DecodeMeshRenderingLayer(float renderingLayer)
     return (uint)(renderingLayer * maxInt + 0.5); // Round instead of truncating
 }
 
+// Functions to clamp UVs to use when RTHandle system is used.
+
+float2 ClampAndScaleUV(float2 UV, float2 texelSize, float numberOfTexels, float2 scale)
+{
+    float2 maxCoord = 1.0f - numberOfTexels * texelSize;
+    return min(UV, maxCoord) * scale;
+}
+
+float2 ClampAndScaleUV(float2 UV, float2 texelSize, float numberOfTexels)
+{
+    return ClampAndScaleUV(UV, texelSize, numberOfTexels, float2(1, 1));
+}
+
+// This is assuming full screen buffer and half a texel offset for the clamping.
+float2 ClampAndScaleUVForBilinear(float2 UV)
+{
+    return ClampAndScaleUV(UV, _ScreenSize.zw, 0.5f);
+}
+
+// Exposure texture - 1x1 RG16F (r: exposure mult, g: exposure EV100)
+TEXTURE2D(_ExposureTexture);
+TEXTURE2D(_PrevExposureTexture);
+
+float _ProbeExposureScale;
+
+float GetCurrentExposureMultiplier()
+{
+    #if SHADEROPTIONS_PRE_EXPOSITION
+    // _ProbeExposureScale is a scale used to perform range compression to avoid saturation of the content of the probes. It is 1.0 if we are not rendering probes.
+    return LOAD_TEXTURE2D(_ExposureTexture, int2(0, 0)).x * _ProbeExposureScale;
+    #else
+    return _ProbeExposureScale;
+    #endif
+}
+
 #endif // UNITY_SHADER_VARIABLES_FUNCTIONS_INCLUDED

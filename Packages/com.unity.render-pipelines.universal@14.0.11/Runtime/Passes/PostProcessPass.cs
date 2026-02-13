@@ -218,6 +218,14 @@ namespace UnityEngine.Rendering.Universal
             m_EdgeStencilTexture?.Release();
             m_TempTarget?.Release();
             m_TempTarget2?.Release();
+            
+            CoreUtils.SafeRelease(m_HistogramBuffer);
+            CoreUtils.SafeRelease(m_DebugImageHistogramBuffer);
+            RTHandles.Release(m_DebugExposureData);
+            
+            m_HistogramBuffer = null;
+            m_DebugImageHistogramBuffer = null;
+            m_DebugExposureData = null;
         }
 
         /// <summary>
@@ -292,6 +300,8 @@ namespace UnityEngine.Rendering.Universal
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             overrideCameraTarget = true;
+            
+            renderingData.cameraData.SetupExposureTextures();
             
             var stack = VolumeManager.instance.stack;
             m_Exposure = stack.GetComponent<Exposure>();
@@ -483,13 +493,13 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // Dynamic Exposure
-            // if (useDynamicExposure)
-            // {
-            //     using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.DynamicExposure)))
-            //     {
-            //         DynamicExposure(cmd, cameraData, GetSource(), GetDestination());
-            //     }
-            // }
+            if (useDynamicExposure)
+            {
+                using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.DynamicExposure)))
+                {
+                    source = DynamicExposure(cmd, cameraData, GetSource(), GetDestination());
+                }
+            }
 
             // Anti-aliasing
             if (useSubPixeMorpAA)
@@ -916,7 +926,7 @@ namespace UnityEngine.Rendering.Universal
             passData.histogramExposureCS = m_Data.shaders.histogramExposureCS;
             passData.histogramExposureCS.shaderKeywords = null;
 
-            passData.viewportSize = new Vector2Int(1, 1);
+            passData.viewportSize = new Vector2Int(cameraData.scaledWidth, cameraData.scaledHeight);
             
             // Setup variants
             var adaptationMode = m_Exposure.adaptationMode.value;
@@ -1017,7 +1027,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
         ;
     
-        void DynamicExposure(CommandBuffer cmd, CameraData cameraData, RTHandle source, RTHandle destination)
+        RTHandle DynamicExposure(CommandBuffer cmd, CameraData cameraData, RTHandle source, RTHandle destination)
         {
             RTHandle exposureForImmediateApplication = null;
             if (!IsExposureFixed(cameraData))
@@ -1061,22 +1071,24 @@ namespace UnityEngine.Rendering.Universal
                         passData.applyExposureCS.shaderKeywords = null;
                         passData.applyExposureKernel = passData.applyExposureCS.FindKernel("KMain");
                         
-                        passData.width = 1; 
-                        passData.height = 1;
                         passData.width = cameraData.scaledWidth;
                         passData.height = cameraData.scaledHeight;
                         passData.viewCount = 1;
                         passData.source = source;
                         passData.prevExposure = exposureForImmediateApplication;
-                        passData.destination = destination;
+                        
+                       RenderingUtils.ReAllocateIfNeeded(ref passData.destination, cameraData.cameraTargetDescriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name:"Apply Exposure");
                         
                         cmd.SetComputeTextureParam(passData.applyExposureCS, passData.applyExposureKernel, ShaderConstants._ExposureTexture, passData.prevExposure);
                         cmd.SetComputeTextureParam(passData.applyExposureCS, passData.applyExposureKernel, ShaderConstants._InputTexture, passData.source);
                         cmd.SetComputeTextureParam(passData.applyExposureCS, passData.applyExposureKernel, ShaderConstants._OutputTexture, passData.destination);
                         cmd.DispatchCompute(passData.applyExposureCS, passData.applyExposureKernel, (passData.width + 7) / 8, (passData.height + 7) / 8, passData.viewCount);
+
+                        source = passData.destination; 
                     }
                 }
             }
+            return source;
         }
 
         static void DoDynamicExposure(DynamicExposureData data, CommandBuffer cmd)
@@ -1138,18 +1150,12 @@ namespace UnityEngine.Rendering.Universal
             
             // Generate histogram.
             kernel = data.exposurePreparationKernel;
-            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._OutputTexture, data.tmpTarget1024);
-            cmd.DispatchCompute(cs, kernel, 1024 / 8, 1024 / 8, 1);
-
-            // Reduction: 1st pass (1024 -> 32)
-            kernel = data.exposureReductionKernel;
             cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._PreviousExposureTexture, data.prevExposure);
-            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._ExposureCurveTexture, Texture2D.blackTexture);
-            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._InputTexture, data.tmpTarget1024);
-            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._OutputTexture, data.tmpTarget32);
-            cmd.DispatchCompute(cs, kernel, 32, 32, 1);
+            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._SourceTexture, data.source);
+            cmd.SetComputeTextureParam(cs, kernel, ShaderConstants._ExposureWeightMask, data.textureMeteringMask);
 
-            cmd.SetComputeVectorParam(cs, ShaderConstants._ExposureParams, data.exposureParams);
+            cmd.SetComputeIntParams(cs, ShaderConstants._Variants, data.exposureVariants);
+
             cmd.SetComputeBufferParam(cs, kernel, ShaderConstants._HistogramBuffer, data.histogramBuffer);
 
             int threadGroupSizeX = 16;

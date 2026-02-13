@@ -200,6 +200,7 @@ namespace UnityEngine.Rendering.Universal
     /// </summary>
     public class CameraData
     {
+        BufferedRTHandleSystem m_HistoryRTSystem = new BufferedRTHandleSystem();
         static Dictionary<Camera, CameraData> s_Cameras = new Dictionary<Camera, CameraData>(); 
         static List<Camera> s_Cleanup = new List<Camera>();
 
@@ -270,7 +271,46 @@ namespace UnityEngine.Rendering.Universal
         void Dispose()
         {
             VolumetricLightingUtils.DestroyVolumetricHistoryBuffers(this);
+            
+            if (m_HistoryRTSystem != null)
+            {
+                m_HistoryRTSystem.Dispose();
+                m_HistoryRTSystem = null;
+            }
+            
             vBufferParams = null;
+        }
+        
+        internal void SetupExposureTextures()
+        {
+            // Always control in pass
+            // if (!m_ExposureControlFS)
+            // {
+            //     m_ExposureTextures.current = null;
+            //     m_ExposureTextures.previous = null;
+            //     return;
+            // }
+
+            var currentTexture = GetCurrentFrameRT((int)UniversalCameraFrameHistoryType.Exposure);
+            if (currentTexture == null)
+            {
+                RTHandle Allocator(string id, int frameIndex, RTHandleSystem rtHandleSystem)
+                {
+                    // r: multiplier, g: EV100
+                    var rt = rtHandleSystem.Alloc(1, 1, colorFormat: GraphicsFormat.R32G32_SFloat,
+                        enableRandomWrite: true, name: $"{id} Exposure Texture {frameIndex}", dimension: TextureDimension.Tex2D
+                    );
+                    UniversalUtils.SetExposureTextureToEmpty(rt);
+                    return rt;
+                }
+
+                currentTexture = AllocHistoryFrameRT((int)UniversalCameraFrameHistoryType.Exposure, Allocator, 2);
+            }
+
+            // One frame delay + history RTs being flipped at the beginning of the frame means we
+            // have to grab the exposure marked as "previous"
+            m_ExposureTextures.current = GetPreviousFrameRT((int)UniversalCameraFrameHistoryType.Exposure);
+            m_ExposureTextures.previous = currentTexture;
         }
         
         // Internal camera data as we are not yet sure how to expose View in stereo context.
@@ -860,6 +900,39 @@ namespace UnityEngine.Rendering.Universal
         
         private ExposureTextures m_ExposureTextures = new ExposureTextures() { useCurrentCamera = true, current = null, previous = null };
         internal ExposureTextures currentExposureTextures { get { return m_ExposureTextures; } }
+        
+        /// <summary>
+        /// Allocates a history RTHandle with the unique identifier id.
+        /// </summary>
+        /// <param name="id">Unique id for this history buffer.</param>
+        /// <param name="allocator">Allocator function for the history RTHandle.</param>
+        /// <param name="bufferCount">Number of buffer that should be allocated.</param>
+        /// <returns>A new RTHandle.</returns>
+        public RTHandle AllocHistoryFrameRT(int id, Func<string, int, RTHandleSystem, RTHandle> allocator, int bufferCount)
+        {
+            m_HistoryRTSystem.AllocBuffer(id, (rts, i) => allocator(camera.name, i, rts), bufferCount);
+            return m_HistoryRTSystem.GetFrameRT(id, 0);
+        }
+
+        /// <summary>
+        /// Returns the id RTHandle from the previous frame.
+        /// </summary>
+        /// <param name="id">Id of the history RTHandle.</param>
+        /// <returns>The RTHandle from previous frame.</returns>
+        public RTHandle GetPreviousFrameRT(int id)
+        {
+            return m_HistoryRTSystem.GetFrameRT(id, 1);
+        }
+
+        /// <summary>
+        /// Returns the id RTHandle of the current frame.
+        /// </summary>
+        /// <param name="id">Id of the history RTHandle.</param>
+        /// <returns>The RTHandle of the current frame.</returns>
+        public RTHandle GetCurrentFrameRT(int id)
+        {
+            return m_HistoryRTSystem.GetFrameRT(id, 0);
+        }
     }
 
     /// <summary>

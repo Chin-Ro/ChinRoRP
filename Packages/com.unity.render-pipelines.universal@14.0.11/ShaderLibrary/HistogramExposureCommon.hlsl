@@ -1,4 +1,4 @@
-#include "Packages/com.unity.render-pipelines.high-definition/Runtime/PostProcessing/Shaders/ExposureCommon.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ExposureCommon.hlsl"
 
 #define HISTOGRAM_BINS 128
 

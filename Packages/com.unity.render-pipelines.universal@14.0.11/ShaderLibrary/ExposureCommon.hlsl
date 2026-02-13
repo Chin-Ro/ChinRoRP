@@ -13,6 +13,8 @@ TEXTURE2D(_PreviousExposureTexture);
 RW_TEXTURE2D(float2, _OutputTexture);
 TEXTURE2D(_ExposureCurveTexture);
 
+SAMPLER(s_linear_clamp_sampler);
+
 CBUFFER_START(cb)
 float4 _ExposureParams;
 float4 _ExposureParams2;

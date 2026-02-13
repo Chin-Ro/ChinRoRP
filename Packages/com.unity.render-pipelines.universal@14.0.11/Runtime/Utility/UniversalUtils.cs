@@ -4,6 +4,8 @@
 //  URP渲染数学库
 //--------------------------------------------------------------------------------------------------------
 
+using UnityEngine.Experimental.Rendering;
+
 namespace UnityEngine.Rendering.Universal
 {
     public class UniversalUtils
@@ -158,6 +160,15 @@ namespace UnityEngine.Rendering.Universal
             GetScaleAndBiasForLinearDistanceFade(fadeDistance, out scale, out bias);
 
             return 1.0f - Mathf.Clamp01(distanceToCamera * scale + bias);
+        }
+        
+        internal static void SetExposureTextureToEmpty(RTHandle exposureTexture)
+        {
+            var tex = new Texture2D(1, 1, GraphicsFormat.R16G16_SFloat, TextureCreationFlags.None);
+            tex.SetPixel(0, 0, new Color(1f, ColorUtils.ConvertExposureToEV100(1f), 0f, 0f));
+            tex.Apply();
+            Graphics.Blit(tex, exposureTexture);
+            CoreUtils.Destroy(tex);
         }
     }
     
