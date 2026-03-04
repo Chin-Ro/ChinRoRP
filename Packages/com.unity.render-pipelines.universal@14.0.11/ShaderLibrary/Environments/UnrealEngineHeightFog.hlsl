@@ -138,7 +138,7 @@ float4 GetExponentialHeightFogUE(float3 WorldPositionRelativeToCamera) // camera
             DirectionalInscattering = 0;
         }
 
-        half3 FogColor = (InscatteringColor) * (1 - ExpFogFactor) + DirectionalInscattering;
+        half3 FogColor = ((InscatteringColor) * (1 - ExpFogFactor) + DirectionalInscattering) * GetCurrentExposureMultiplier();
 
         return half4(FogColor, ExpFogFactor);
     }

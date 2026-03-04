@@ -933,6 +933,13 @@ namespace UnityEngine.Rendering.Universal
         {
             return m_HistoryRTSystem.GetFrameRT(id, 0);
         }
+        
+        /// <summary>Set the RTHandle scale to the actual camera size (can be scaled)</summary>
+        internal void SetReferenceSize()
+        {
+            RTHandles.SetReferenceSize(cameraTargetDescriptor.width, cameraTargetDescriptor.height);
+            m_HistoryRTSystem.SwapAndSetReferenceSize(cameraTargetDescriptor.width, cameraTargetDescriptor.width);
+        }
     }
 
     /// <summary>
@@ -1205,6 +1212,9 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int overlayUITexture = Shader.PropertyToID("_OverlayUITexture");
         public static readonly int hdrOutputLuminanceParams = Shader.PropertyToID("_HDROutputLuminanceParams");
         public static readonly int hdrOutputGradingParams = Shader.PropertyToID("_HDROutputGradingParams");
+        
+        public static readonly int _ExposureTexture = Shader.PropertyToID("_ExposureTexture");
+        public static readonly int _PrevExposureTexture = Shader.PropertyToID("_PrevExposureTexture");
     }
 
     /// <summary>

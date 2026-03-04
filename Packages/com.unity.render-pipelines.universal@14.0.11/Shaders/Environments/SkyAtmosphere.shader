@@ -170,7 +170,7 @@
 						SkyGreyTransmittance = SkyLuminanceTransmittance.aaa;
 					}
      
-					PreExposedL += SkyLuminance * LuminanceScale * (ViewOneOverPreExposure * OutputPreExposure);
+					PreExposedL += SkyLuminance * LuminanceScale;
      
 					OutLuminance = PrepareOutput(PreExposedL, SkyGreyTransmittance);
 					UpdateVisibleSkyAlpha(DeviceZ, OutLuminance);

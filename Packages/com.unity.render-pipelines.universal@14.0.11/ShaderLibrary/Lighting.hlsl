@@ -24,7 +24,7 @@
 half3 LightingLambert(half3 lightColor, half3 lightDir, half3 normal)
 {
     half NdotL = saturate(dot(normal, lightDir));
-    return lightColor * NdotL;
+    return lightColor * NdotL * GetCurrentExposureMultiplier();
 }
 
 half3 LightingSpecular(half3 lightColor, half3 lightDir, half3 normal, half3 viewDir, half4 specular, half smoothness)
@@ -34,7 +34,7 @@ half3 LightingSpecular(half3 lightColor, half3 lightDir, half3 normal, half3 vie
     half modifier = pow(NdotH, smoothness);
     // NOTE: In order to fix internal compiler error on mobile platforms, this needs to be float3
     float3 specularReflection = specular.rgb * modifier;
-    return lightColor * specularReflection;
+    return lightColor * specularReflection * GetCurrentExposureMultiplier();
 }
 
 half3 LightingPhysicallyBased(BRDFData brdfData, BRDFData brdfDataClearCoat,
@@ -69,7 +69,7 @@ half3 LightingPhysicallyBased(BRDFData brdfData, BRDFData brdfDataClearCoat,
     }
 #endif // _SPECULARHIGHLIGHTS_OFF
 
-    return brdf * radiance;
+    return brdf * radiance * GetCurrentExposureMultiplier();
 }
 
 half3 LightingPhysicallyBased(BRDFData brdfData, BRDFData brdfDataClearCoat, Light light, half3 normalWS, half3 viewDirectionWS, half clearCoatMask, bool specularHighlightsOff)

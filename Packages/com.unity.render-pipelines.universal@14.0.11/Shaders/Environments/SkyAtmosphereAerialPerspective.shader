@@ -17,7 +17,7 @@ Shader "Hidden/SkyAtmosphereAerialPerspective"
             #pragma fragment Frag
 
             // #pragma multi_compile _ SOURCE_DISK_ENABLED
-            #pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
+            // #pragma multi_compile _ SECOND_ATMOSPHERE_LIGHT_ENABLED
             
             // #define PER_PIXEL_NOISE 1
             #define MULTISCATTERING_APPROX_SAMPLING_ENABLED 1
@@ -199,7 +199,7 @@ Shader "Hidden/SkyAtmosphereAerialPerspective"
 						AerialPerspectiveStartDepthKm,
 						CameraAerialPerspectiveVolumeDepthSliceLengthKm,
 						CameraAerialPerspectiveVolumeDepthSliceLengthKmInv,
-						ViewOneOverPreExposure * OutputPreExposure,
+						1,
 						NearFadeOutRangeInvDepthKm);
     
 					PreExposedL += AP.rgb * LuminanceScale;

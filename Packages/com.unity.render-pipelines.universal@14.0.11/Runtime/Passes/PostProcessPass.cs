@@ -191,6 +191,26 @@ namespace UnityEngine.Rendering.Universal
                     : GraphicsFormat.R8G8B8A8_UNorm;
                 m_UseRGBM = true;
             }
+            
+            // Setup a default exposure textures and clear it to neutral values so that the exposure
+            // multiplier is 1 and thus has no effect
+            // Beware that 0 in EV100 maps to a multiplier of 0.833 so the EV100 value in this
+            // neutral exposure texture isn't 0
+            m_EmptyExposureTexture = RTHandles.Alloc(1, 1, colorFormat: GraphicsFormat.R32G32_SFloat,
+                enableRandomWrite: true, name: "Empty EV100 Exposure");
+
+            m_DebugExposureData = RTHandles.Alloc(1, 1, colorFormat: GraphicsFormat.R32G32_SFloat,
+                enableRandomWrite: true, name: "Debug Exposure Info");
+
+            m_ExposureCurveTexture = new Texture2D(k_ExposureCurvePrecision, 1, GraphicsFormat.R16G16B16A16_SFloat, TextureCreationFlags.None)
+            {
+                name = "Exposure Curve",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            m_ExposureCurveTexture.hideFlags = HideFlags.HideAndDontSave;
+            
+            SetExposureTextureToEmpty(m_EmptyExposureTexture);
         }
 
         /// <summary>
@@ -219,13 +239,16 @@ namespace UnityEngine.Rendering.Universal
             m_TempTarget?.Release();
             m_TempTarget2?.Release();
             
+            CoreUtils.Destroy(m_ExposureCurveTexture);
             CoreUtils.SafeRelease(m_HistogramBuffer);
             CoreUtils.SafeRelease(m_DebugImageHistogramBuffer);
             RTHandles.Release(m_DebugExposureData);
+            RTHandles.Release(m_EmptyExposureTexture);
             
             m_HistogramBuffer = null;
             m_DebugImageHistogramBuffer = null;
             m_DebugExposureData = null;
+            m_EmptyExposureTexture = null;
         }
 
         /// <summary>
@@ -497,7 +520,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.DynamicExposure)))
                 {
-                    source = DynamicExposure(cmd, cameraData, GetSource(), GetDestination());
+                    source = DynamicExposure(cmd, cameraData, GetSource());
                 }
             }
 
@@ -1020,6 +1043,15 @@ namespace UnityEngine.Rendering.Universal
                 prevExposure = m_EmptyExposureTexture; // Use neutral texture
             }
         }
+                
+        internal static void SetExposureTextureToEmpty(RTHandle exposureTexture)
+        {
+            var tex = new Texture2D(1, 1, GraphicsFormat.R16G16_SFloat, TextureCreationFlags.None);
+            tex.SetPixel(0, 0, new Color(1f, ColorUtils.ConvertExposureToEV100(1f), 0f, 0f));
+            tex.Apply();
+            Graphics.Blit(tex, exposureTexture);
+            CoreUtils.Destroy(tex);
+        }
 
         bool IsExposureFixed(CameraData cameraData) => m_Exposure.mode.value == ExposureMode.Fixed  || m_Exposure.mode.value == ExposureMode.UsePhysicalCamera
 #if UNITY_EDITOR
@@ -1027,7 +1059,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
         ;
     
-        RTHandle DynamicExposure(CommandBuffer cmd, CameraData cameraData, RTHandle source, RTHandle destination)
+        RTHandle DynamicExposure(CommandBuffer cmd, CameraData cameraData, RTHandle source)
         {
             RTHandle exposureForImmediateApplication = null;
             if (!IsExposureFixed(cameraData))
@@ -1052,6 +1084,7 @@ namespace UnityEngine.Rendering.Universal
                         descriptor.useDynamicScale = false;
                         descriptor.enableRandomWrite = true;
                         descriptor.graphicsFormat = GraphicsFormat.R16G16_SFloat;
+                        descriptor.dimension = TextureDimension.Tex2D;
                         RenderingUtils.ReAllocateIfNeeded(ref passData.tmpTarget32, descriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name:"Average Luminance Temp 1024");
                         descriptor.width = 32;
                         descriptor.height = 32;
@@ -1077,7 +1110,10 @@ namespace UnityEngine.Rendering.Universal
                         passData.source = source;
                         passData.prevExposure = exposureForImmediateApplication;
                         
-                       RenderingUtils.ReAllocateIfNeeded(ref passData.destination, cameraData.cameraTargetDescriptor, FilterMode.Bilinear, TextureWrapMode.Clamp, name:"Apply Exposure");
+                        var desc = GetCompatibleDescriptor(cameraData.scaledWidth, cameraData.scaledHeight, m_DefaultHDRFormat);
+                        desc.enableRandomWrite = true;
+                        
+                       RenderingUtils.ReAllocateIfNeeded(ref passData.destination, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name:"Apply Exposure");
                         
                         cmd.SetComputeTextureParam(passData.applyExposureCS, passData.applyExposureKernel, ShaderConstants._ExposureTexture, passData.prevExposure);
                         cmd.SetComputeTextureParam(passData.applyExposureCS, passData.applyExposureKernel, ShaderConstants._InputTexture, passData.source);

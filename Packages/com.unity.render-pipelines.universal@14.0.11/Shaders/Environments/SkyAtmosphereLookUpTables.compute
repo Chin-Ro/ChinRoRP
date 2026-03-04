@@ -297,10 +297,10 @@ void UvToSkyViewLutParams(out float3 ViewDir, in float ViewHeight, in float2 UV)
 
 #if VIEWDATA_AVAILABLE
 // Exposure used for regular views by the FastSky and AP LUTs.
-#define ViewPreExposure			1.0f //View.PreExposure
-#define ViewOneOverPreExposure	1.0f //View.OneOverPreExposure
+#define ViewPreExposure			GetCurrentExposureMultiplier()  //View.PreExposure
+#define ViewOneOverPreExposure	GetInverseCurrentExposureMultiplier() //View.OneOverPreExposure
 // When rendering a real time reflection capture (sky envmap) whe use a different output exposure
-#define OutputPreExposure		1.0f //(View.RealTimeReflectionCapture ? View.RealTimeReflectionCapturePreExposure : View.PreExposure)
+#define OutputPreExposure		GetCurrentExposureMultiplier()  //(View.RealTimeReflectionCapture ? View.RealTimeReflectionCapturePreExposure : View.PreExposure)
 #else
 #define ViewPreExposure			1.0f
 #define ViewOneOverPreExposure	1.0f

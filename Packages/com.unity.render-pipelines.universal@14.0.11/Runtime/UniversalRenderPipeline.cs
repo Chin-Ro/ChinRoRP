@@ -666,6 +666,12 @@ namespace UnityEngine.Rendering.Universal
                 cmd.Clear();
 
                 SetupPerCameraShaderConstants(cmd);
+                
+                if (cameraData.cameraType == CameraType.Reflection)
+                {
+                    cmd.SetGlobalTexture(ShaderPropertyId._ExposureTexture, Texture2D.whiteTexture);
+                    cmd.SetGlobalTexture(ShaderPropertyId._PrevExposureTexture, Texture2D.whiteTexture);
+                }
 
                 // Emit scene/game view UI. The main game camera UI is always rendered, so this needs to be handled only for different camera types
                 if (camera.cameraType == CameraType.Reflection || camera.cameraType == CameraType.Preview)
@@ -687,8 +693,8 @@ namespace UnityEngine.Rendering.Universal
                 // NOTE: Shared between both Execute and Render (RG) paths.
                 if (cameraData.taaPersistentData != null)
                     UpdateTemporalAATargets(ref cameraData);
-
-                RTHandles.SetReferenceSize(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height);
+                
+                cameraData.SetReferenceSize();
 
                 // Do NOT use cameraData after 'InitializeRenderingData'. CameraData state may diverge otherwise.
                 // RenderingData takes a copy of the CameraData.
