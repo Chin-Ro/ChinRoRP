@@ -201,7 +201,7 @@ half DirectBRDFSpecular(BRDFData brdfData, half3 normalWS, half3 lightDirectionW
     float d = NoH * NoH * brdfData.roughness2MinusOne + 1.00001f;
 
     half LoH2 = LoH * LoH;
-    half specularTerm = brdfData.roughness2 / ((d * d) * max(0.1h, LoH2) * brdfData.normalizationTerm);
+    half specularTerm = (brdfData.roughness2 / ((d * d) * max(0.1h, LoH2) * brdfData.normalizationTerm)) * INV_PI;
 
     // On platforms where half actually means something, the denominator has a risk of overflow
     // clamp below was added specifically to "fix" that, but dx compiler (we convert bytecode to metal/gles)
