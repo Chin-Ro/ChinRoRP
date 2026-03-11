@@ -219,7 +219,7 @@ LightingData CreateLightingData(InputData inputData, SurfaceData surfaceData)
     LightingData lightingData;
 
     lightingData.giColor = inputData.bakedGI;
-    lightingData.emissionColor = surfaceData.emission;
+    lightingData.emissionColor = surfaceData.emission * GetCurrentExposureMultiplier();
     lightingData.vertexLightingColor = 0;
     lightingData.mainLightColor = 0;
     lightingData.additionalLightsColor = 0;

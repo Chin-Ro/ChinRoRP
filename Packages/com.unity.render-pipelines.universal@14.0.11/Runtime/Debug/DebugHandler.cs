@@ -52,8 +52,10 @@ namespace UnityEngine.Rendering.Universal
 
         readonly Material m_ReplacementMaterial;
         readonly Material m_HDRDebugViewMaterial;
+        readonly Material m_DebugExposureMaterial;
 
         HDRDebugViewPass m_HDRDebugViewPass;
+        ExposureDebugPass m_ExposureDebugPass;
         RTHandle m_DebugScreenColorHandle;
         RTHandle m_DebugScreenDepthHandle;
 
@@ -95,11 +97,17 @@ namespace UnityEngine.Rendering.Universal
         internal ref RTHandle DebugScreenColorHandle => ref m_DebugScreenColorHandle;
         internal ref RTHandle DebugScreenDepthHandle => ref m_DebugScreenDepthHandle;
         internal HDRDebugViewPass hdrDebugViewPass => m_HDRDebugViewPass;
+        internal ExposureDebugPass exposureDebugPass => m_ExposureDebugPass;
 
         internal bool HDRDebugViewIsActive(ref CameraData cameraData)
         {
             // HDR debug views should only apply to the last camera in the stack
             return DebugDisplaySettings.lightingSettings.hdrDebugMode != HDRDebugMode.None && cameraData.resolveFinalTarget;
+        }
+
+        internal bool NeedExposureDebugMode()
+        {
+            return DebugDisplaySettings.lightingSettings.exposureDebugMode != ExposureDebugMode.None;
         }
 
         internal bool WriteToDebugScreenTexture(ref CameraData cameraData)
@@ -129,22 +137,27 @@ namespace UnityEngine.Rendering.Universal
         {
             Shader debugReplacementShader = scriptableRendererData.debugShaders.debugReplacementPS;
             Shader hdrDebugViewShader = scriptableRendererData.debugShaders.hdrDebugViewPS;
+            Shader exposureDebugShader = scriptableRendererData.debugShaders.debugExposurePS;
 
             m_DebugDisplaySettings = UniversalRenderPipelineDebugDisplaySettings.Instance;
 
             m_ReplacementMaterial = (debugReplacementShader == null) ? null : CoreUtils.CreateEngineMaterial(debugReplacementShader);
             m_HDRDebugViewMaterial = (hdrDebugViewShader == null) ? null : CoreUtils.CreateEngineMaterial(hdrDebugViewShader);
+            m_DebugExposureMaterial = (exposureDebugShader == null) ? null : CoreUtils.CreateEngineMaterial(exposureDebugShader);
 
             m_HDRDebugViewPass = new HDRDebugViewPass(m_HDRDebugViewMaterial);
+            m_ExposureDebugPass = new ExposureDebugPass(m_DebugExposureMaterial);
         }
 
         public void Dispose()
         {
             m_HDRDebugViewPass.Dispose();
+            m_ExposureDebugPass.Dispose();
             m_DebugScreenColorHandle?.Release();
             m_DebugScreenDepthHandle?.Release();
             CoreUtils.Destroy(m_HDRDebugViewMaterial);
             CoreUtils.Destroy(m_ReplacementMaterial);
+            CoreUtils.Destroy(m_DebugExposureMaterial);
         }
 
         internal bool IsActiveForCamera(ref CameraData cameraData)

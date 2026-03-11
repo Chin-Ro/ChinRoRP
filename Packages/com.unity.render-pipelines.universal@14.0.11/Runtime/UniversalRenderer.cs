@@ -547,6 +547,12 @@ namespace UnityEngine.Rendering.Universal
                         DebugHandler.hdrDebugViewPass.Setup(ref cameraData, DebugHandler.DebugDisplaySettings.lightingSettings.hdrDebugMode);
                         EnqueuePass(DebugHandler.hdrDebugViewPass);
                     }
+
+                    if (DebugHandler.NeedExposureDebugMode())
+                    {
+                        DebugHandler.exposureDebugPass.Setup(DebugHandler.DebugDisplaySettings.lightingSettings);
+                        EnqueuePass(DebugHandler.exposureDebugPass);
+                    }
                 }
             }
 

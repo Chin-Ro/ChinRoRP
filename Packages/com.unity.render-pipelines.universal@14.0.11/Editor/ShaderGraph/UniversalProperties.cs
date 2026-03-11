@@ -33,5 +33,10 @@ namespace UnityEditor.Rendering.Universal
         // Global Illumination requires some properties to be named specifically:
         public static readonly string EmissionMap = "_EmissionMap";
         public static readonly string EmissionColor = "_EmissionColor";
+        public static readonly string EmissiveColorLDR = "_EmissiveColorLDR";
+        public static readonly string UseEmissiveIntensity = "_UseEmissiveIntensity";
+        public static readonly string EmissiveExposureWeight = "_EmissiveExposureWeight";
+        public static readonly string EmissiveIntensity = "_EmissiveIntensity";
+        public static readonly string EmissiveIntensityUnit = "_EmissiveIntensityUnit";
     }
 }

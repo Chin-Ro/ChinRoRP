@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEditor.Rendering.Universal;
+using UnityEngine.Rendering.Universal;
 
 namespace UnityEditor.Rendering.Universal.ShaderGUI
 {
@@ -20,6 +21,9 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
         public override void ValidateMaterial(Material material)
         {
             SetMaterialKeywords(material);
+            
+            if (material.HasProperty(Property.UseEmissiveIntensity) && material.GetFloat(Property.UseEmissiveIntensity) != 0)
+                material.UpdateEmissiveColorFromIntensityAndEmissiveColorLDR();
         }
 
         // material main surface options

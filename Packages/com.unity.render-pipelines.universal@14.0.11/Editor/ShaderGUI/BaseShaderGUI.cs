@@ -275,6 +275,11 @@ namespace UnityEditor
             /// </summary>
             public static readonly GUIContent emissionMap = EditorGUIUtility.TrTextContent("Emission Map",
                 "Determines the color and intensity of light that the surface of the material emits.");
+            
+            public static GUIContent useEmissiveIntensityText = new GUIContent("Use Emission Intensity", "Specifies whether to use to a HDR color or a LDR color with a separate multiplier.");
+            public static GUIContent emissiveIntensityText = new GUIContent("Emission Intensity", "Emission intensity in provided Unit");
+            public static GUIContent emissiveIntensityFromHDRColorText = new GUIContent("The emission intensity is from the HDR color picker in luminance", "");
+            public static GUIContent emissiveExposureWeightText = new GUIContent("Exposure weight", "Controls how the camera exposure influences the perceived intensity of the emissivity. A weight of 0 means that the emissive intensity is calculated ignoring the exposure; increasing this weight progressively increases the influence of exposure on the final emissive value.");
 
             /// <summary>
             /// The text and tooltip for the normal map GUI.
@@ -393,6 +398,12 @@ namespace UnityEditor
         /// The MaterialProperty for emission color.
         /// </summary>
         protected MaterialProperty emissionColorProp { get; set; }
+        
+        protected MaterialProperty emissiveColorLDR { get; set; }
+        protected MaterialProperty emissiveExposureWeight { get; set; }
+        protected MaterialProperty useEmissiveIntensity { get; set; }
+        protected MaterialProperty emissiveIntensityUnit { get; set; }
+        protected MaterialProperty emissiveIntensity { get; set; }
 
         /// <summary>
         /// The MaterialProperty for queue offset.
@@ -415,6 +426,10 @@ namespace UnityEditor
         #endregion
 
         private const int queueOffsetRange = 50;
+        
+        // Max EV Value. Equals to LightUtils.ConvertLuminanceToEv(float.MaxValue)
+        // Literal value to avoid precision issue with max float and to be independent of ColorUtils.s_LightMeterCalibrationConstant.
+        static float s_MaxEvValue = 130.0f;
 
         ////////////////////////////////////
         // General Functions              //
@@ -461,9 +476,15 @@ namespace UnityEditor
             alphaCutoffProp = FindProperty("_Cutoff", properties, false);
             baseMapProp = FindProperty("_BaseMap", properties, false);
             baseColorProp = FindProperty("_BaseColor", properties, false);
-            emissionMapProp = FindProperty(Property.EmissionMap, properties, false);
-            emissionColorProp = FindProperty(Property.EmissionColor, properties, false);
             queueOffsetProp = FindProperty(Property.QueueOffset, properties, false);
+            
+            emissionColorProp = FindProperty(Property.EmissionColor, properties, false);
+            emissionMapProp = FindProperty(Property.EmissionMap, properties, false);
+            emissiveColorLDR = FindProperty(Property.EmissiveColorLDR, properties, false);
+            emissiveExposureWeight = FindProperty(Property.EmissiveExposureWeight, properties, false);
+            useEmissiveIntensity = FindProperty(Property.UseEmissiveIntensity, properties, false);
+            emissiveIntensityUnit = FindProperty(Property.EmissiveIntensityUnit, properties, false);
+            emissiveIntensity = FindProperty(Property.EmissiveIntensity, properties, false);
         }
 
         /// <inheritdoc/>
@@ -639,15 +660,78 @@ namespace UnityEditor
             }
         }
 
-        private void DrawEmissionTextureProperty()
+        private void DrawEmissionTextureProperty(MaterialProperty color)
         {
-            if ((emissionMapProp == null) || (emissionColorProp == null))
+            if ((emissionMapProp == null) || (color == null))
                 return;
 
-            using (new EditorGUI.IndentLevelScope(2))
+            using (new EditorGUI.IndentLevelScope(1))
             {
-                materialEditor.TexturePropertyWithHDRColor(Styles.emissionMap, emissionMapProp, emissionColorProp, false);
+                materialEditor.TexturePropertySingleLine(Styles.emissionMap, emissionMapProp, color);
             }
+        }
+        
+        internal static void UpdateEmissiveColorLDRAndIntensityFromEmissiveColor(MaterialProperty emissiveColorLDR, MaterialProperty emissiveIntensity, MaterialProperty emissiveColor)
+        {
+            UniversalUtils.ConvertHDRColorToLDR(emissiveColor.colorValue, out var colorLDR, out var intensity);
+            emissiveIntensity.floatValue = intensity;
+            emissiveColorLDR.colorValue = colorLDR.gamma;
+        }
+        
+        internal static void DoEmissiveIntensityGUI(MaterialEditor materialEditor, MaterialProperty emissiveIntensity, MaterialProperty emissiveIntensityUnit)
+        {
+            MaterialEditor.BeginProperty(emissiveIntensity);
+            MaterialEditor.BeginProperty(emissiveIntensityUnit);
+
+            bool unitIsMixed = emissiveIntensityUnit.hasMixedValue;
+            bool intensityIsMixed = unitIsMixed || emissiveIntensity.hasMixedValue;
+
+            float indent = 15 * EditorGUI.indentLevel;
+            const int k_ValueUnitSeparator = 2;
+            const int k_UnitWidth = 100;
+            Rect valueRect = EditorGUILayout.GetControlRect();
+            valueRect.width += indent - k_ValueUnitSeparator - k_UnitWidth;
+            Rect unitRect = valueRect;
+            unitRect.x += valueRect.width - indent + k_ValueUnitSeparator;
+            unitRect.width = k_UnitWidth + .5f;
+
+            {
+                EditorGUI.showMixedValue = intensityIsMixed;
+                EmissiveIntensityUnit unit = (EmissiveIntensityUnit)emissiveIntensityUnit.floatValue;
+
+                if (unitIsMixed)
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                        materialEditor.ShaderProperty(valueRect, emissiveIntensity, Styles.emissiveIntensityText);
+                }
+                else
+                {
+                    if (!intensityIsMixed && unit == EmissiveIntensityUnit.EV100)
+                    {
+                        float evValue = LightUtils.ConvertLuminanceToEv(emissiveIntensity.floatValue);
+                        evValue = EditorGUI.FloatField(valueRect, Styles.emissiveIntensityText, evValue);
+                        evValue = Mathf.Clamp(evValue, 0, s_MaxEvValue);    
+                        emissiveIntensity.floatValue = LightUtils.ConvertEvToLuminance(evValue);
+                    }
+                    else
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        materialEditor.ShaderProperty(valueRect, emissiveIntensity, Styles.emissiveIntensityText);
+                        if (EditorGUI.EndChangeCheck())
+                            emissiveIntensity.floatValue = Mathf.Clamp(emissiveIntensity.floatValue, 0, float.MaxValue);
+                    }
+                }
+
+                EditorGUI.showMixedValue = emissiveIntensityUnit.hasMixedValue;
+                EditorGUI.BeginChangeCheck();
+                var newUnit = (EmissiveIntensityUnit)EditorGUI.EnumPopup(unitRect, unit);
+                if (EditorGUI.EndChangeCheck())
+                    emissiveIntensityUnit.floatValue = (float)newUnit;
+            }
+            EditorGUI.showMixedValue = false;
+
+            MaterialEditor.EndProperty();
+            MaterialEditor.EndProperty();
         }
 
         /// <summary>
@@ -657,28 +741,33 @@ namespace UnityEditor
         /// <param name="keyword">The keyword used for emission.</param>
         protected virtual void DrawEmissionProperties(Material material, bool keyword)
         {
-            var emissive = true;
-
-            if (!keyword)
+            var emissive = materialEditor.EmissionEnabledProperty();
+            using (new EditorGUI.DisabledScope(!emissive))
             {
-                DrawEmissionTextureProperty();
-            }
-            else
-            {
-                emissive = materialEditor.EmissionEnabledProperty();
-                using (new EditorGUI.DisabledScope(!emissive))
+                EditorGUI.BeginChangeCheck();
+                materialEditor.ShaderProperty(useEmissiveIntensity, Styles.useEmissiveIntensityText);
+                bool updateEmissiveColor = EditorGUI.EndChangeCheck();
+                
+                // This flag allows us to track is a material has a non-null emission color. That would require us to enable the target pass
+                if (useEmissiveIntensity.floatValue == 0)
                 {
-                    DrawEmissionTextureProperty();
+                    DrawEmissionTextureProperty(emissionColorProp);
+                    EditorGUILayout.HelpBox(Styles.emissiveIntensityFromHDRColorText.text, MessageType.Info, true);
                 }
-            }
+                else
+                {
+                    if (updateEmissiveColor)
+                        UpdateEmissiveColorLDRAndIntensityFromEmissiveColor(emissiveColorLDR, emissiveIntensity, emissionColorProp);
 
-            // If texture was assigned and color was black set color to white
-            if ((emissionMapProp != null) && (emissionColorProp != null))
-            {
-                var hadEmissionTexture = emissionMapProp?.textureValue != null;
-                var brightness = emissionColorProp.colorValue.maxColorComponent;
-                if (emissionMapProp.textureValue != null && !hadEmissionTexture && brightness <= 0f)
-                    emissionColorProp.colorValue = Color.white;
+                    DrawEmissionTextureProperty(emissiveColorLDR);
+                    EditorGUI.indentLevel++;
+                    EditorGUI.indentLevel++;
+                    DoEmissiveIntensityGUI(materialEditor, emissiveIntensity, emissiveIntensityUnit);
+                    EditorGUI.indentLevel--;
+                    EditorGUI.indentLevel--;
+                }
+                
+                materialEditor.ShaderProperty(emissiveExposureWeight, Styles.emissiveExposureWeightText);
             }
 
             if (emissive)

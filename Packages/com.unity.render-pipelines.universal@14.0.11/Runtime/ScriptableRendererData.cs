@@ -35,6 +35,9 @@ namespace UnityEngine.Rendering.Universal
             /// </summary>
             [Reload("Shaders/Debug/HDRDebugView.shader")]
             public Shader hdrDebugViewPS;
+            
+            [Reload("Shaders/Debug/DebugExposure.shader")]
+            public Shader debugExposurePS;
         }
 
         /// <summary>

@@ -50,12 +50,15 @@ half3 SampleNormal(float2 uv, TEXTURE2D_PARAM(bumpMap, sampler_bumpMap), half sc
 #endif
 }
 
-half3 SampleEmission(float2 uv, half3 emissionColor, TEXTURE2D_PARAM(emissionMap, sampler_emissionMap))
+half3 SampleEmission(float2 uv, half3 emissionColor, TEXTURE2D_PARAM(emissionMap, sampler_emissionMap), float _EmissiveExposureWeight)
 {
 #ifndef _EMISSION
     return 0;
 #else
-    return SAMPLE_TEXTURE2D(emissionMap, sampler_emissionMap, uv).rgb * emissionColor;
+    half3 emission = SAMPLE_TEXTURE2D(emissionMap, sampler_emissionMap, uv).rgb * emissionColor;
+    // Inverse pre-expose using _EmissiveExposureWeight weight
+    half3 emissiveRcpExposure = emission * GetInverseCurrentExposureMultiplier();
+    return lerp(emissiveRcpExposure, emission, _EmissiveExposureWeight);
 #endif
 }
 

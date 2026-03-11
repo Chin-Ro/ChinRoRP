@@ -25,7 +25,7 @@ namespace UnityEngine.Rendering.Universal
         public HDRDebugMode hdrDebugMode { get; set; }
         
         /// <summary>Exposure debug mode.</summary>
-        public ExposureDebugMode exposureDebugMode = ExposureDebugMode.None;
+        public ExposureDebugMode exposureDebugMode { get; set; }
 
         static internal class Strings
         {
@@ -63,6 +63,16 @@ namespace UnityEngine.Rendering.Universal
                 getIndex = () => (int)panel.data.hdrDebugMode,
                 setIndex = (value) => panel.data.hdrDebugMode = (HDRDebugMode)value
             };
+            
+            internal static DebugUI.Widget CreateExposureDebugMode(SettingsPanel panel) => new DebugUI.EnumField
+            {
+                nameAndTooltip = new NameAndTooltip { name = "Exposure Debug Mode", tooltip = "Select which exposure debug information to overlay on the screen." },
+                autoEnum = typeof(ExposureDebugMode),
+                getter = () => (int)panel.data.exposureDebugMode,
+                setter = (value) => panel.data.exposureDebugMode = (ExposureDebugMode)value,
+                getIndex = () => (int)panel.data.exposureDebugMode,
+                setIndex = (value) => panel.data.exposureDebugMode = (ExposureDebugMode)value
+            };
         }
 
         [DisplayInfo(name = "Lighting", order = 3)]
@@ -83,7 +93,8 @@ namespace UnityEngine.Rendering.Universal
                     {
                         WidgetFactory.CreateLightingDebugMode(this),
                         WidgetFactory.CreateHDRDebugMode(this),
-                        WidgetFactory.CreateLightingFeatures(this)
+                        WidgetFactory.CreateLightingFeatures(this),
+                        WidgetFactory.CreateExposureDebugMode(this)
                     }
                 });
             }
